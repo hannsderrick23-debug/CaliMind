@@ -1,0 +1,41 @@
+# Flutter & Dart gitignore
+.dart_tool/
+.packages
+build/
+.pub-cache/
+.pub/
+.puro/
+.puro.json
+*.lock
+!pubspec.lock
+
+# Android
+android/**/gradle-wrapper.jar
+android/.gradle
+android/captures/
+android/gradlew
+android/gradlew.bat
+android/local.properties
+android/**/GeneratedPluginRegistrant.java
+android/**/*.keystore
+
+# iOS
+ios/Runner/GeneratedPluginRegistrant.*
+ios/Pods/
+ios/.symlinks/
+ios/Flutter/Flutter.framework
+ios/Flutter/Flutter.podspec
+ios/Flutter/App.framework
+ios/Flutter/ephemeral
+
+# Secrets & Environment
+.env
+*.env.local
+
+# IDE & OS
+.idea/
+.vscode/
+*.swp
+*.iml
+.DS_Store
+Thumbs.db

@@ -1,0 +1,56 @@
+name: calimind
+description: "Voice-first daily task planner & AI scheduling assistant."
+publish_to: "none"
+version: 1.0.0+1
+
+environment:
+  sdk: ">=3.5.0 <4.0.0"
+  flutter: ">=3.24.0"
+
+dependencies:
+  flutter:
+    sdk: flutter
+  flutter_localizations:
+    sdk: flutter
+
+  # State Management & Architecture
+  flutter_riverpod: ^2.5.1
+  riverpod_annotation: ^2.3.5
+
+  # Routing & Navigation
+  go_router: ^14.2.0
+
+  # Backend & Database
+  supabase_flutter: ^2.8.0
+
+  # Voice & Audio Hardware
+  speech_to_text: ^7.0.0          # Native iOS SFSpeechRecognizer & Android SpeechRecognizer
+  record: ^5.2.0                  # Fallback high-fidelity audio recorder for Whisper API
+  flutter_tts: ^4.2.0             # Native Text-To-Speech audio feedback
+  audioplayers: ^6.1.0            # Sound effects & feedback chimes
+
+  # Hardware & Native Features
+  local_auth: ^2.3.0              # Biometric unlock (FaceID / Fingerprint)
+  flutter_secure_storage: ^9.2.2  # Encrypted iOS Keychain / Android EncryptedSharedPrefs
+  share_plus: ^10.1.0             # Native OS share dialog for announcements
+  flutter_local_notifications: ^18.0.0 # Reminders & task schedule alerts
+  url_launcher: ^6.3.0
+  path_provider: ^2.1.4
+
+  # UI, Icons, Typography & Motion
+  google_fonts: ^6.2.1            # Space Grotesk, Inter, JetBrains Mono
+  lucide_icons: ^0.354.0          # Lucide icons matching web application
+  flutter_animate: ^4.5.0         # Micro-interactions & mic-pulse animations
+  intl: ^0.19.0                   # Date formatting and localization
+
+dev_dependencies:
+  flutter_test:
+    sdk: flutter
+  flutter_lints: ^4.0.0
+  build_runner: ^2.4.11
+  riverpod_generator: ^2.4.2
+  custom_lint: ^0.6.4
+  riverpod_lint: ^2.3.10
+
+flutter:
+  uses-material-design: true
