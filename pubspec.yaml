@@ -15,7 +15,6 @@ dependencies:
 
   # State Management & Architecture
   flutter_riverpod: ^2.5.1
-  riverpod_annotation: ^2.3.5
 
   # Routing & Navigation
   go_router: ^14.2.0
@@ -37,20 +36,19 @@ dependencies:
   url_launcher: ^6.3.0
   path_provider: ^2.1.4
 
+  # HTTP & Cloud APIs
+  http: ^1.2.2
+
   # UI, Icons, Typography & Motion
   google_fonts: ^6.2.1            # Space Grotesk, Inter, JetBrains Mono
-  lucide_icons: ^0.354.0          # Lucide icons matching web application
+  lucide_icons_flutter: ^3.1.21   # Modern Lucide icons
   flutter_animate: ^4.5.0         # Micro-interactions & mic-pulse animations
-  intl: ^0.19.0                   # Date formatting and localization
+  intl: ^0.20.2                   # Date formatting and localization
 
 dev_dependencies:
   flutter_test:
     sdk: flutter
   flutter_lints: ^4.0.0
-  build_runner: ^2.4.11
-  riverpod_generator: ^2.4.2
-  custom_lint: ^0.6.4
-  riverpod_lint: ^2.3.10
 
 flutter:
   uses-material-design: true

@@ -33,7 +33,7 @@ class CaliMindApp extends ConsumerWidget {
         onSurface: CaliMindColors.foreground,
       ),
       textTheme: CaliMindTypography.textTheme,
-      cardTheme: CardTheme(
+      cardTheme: CardThemeData(
         color: CaliMindColors.card,
         shape: RoundedRectangleBorder(
           borderRadius: BorderRadius.circular(16),
@@ -54,12 +54,11 @@ class CaliMindApp extends ConsumerWidget {
       ),
       bottomSheetTheme: const BottomSheetThemeData(
         backgroundColor: CaliMindColors.card,
-        modalBackgroundColor: CaliMindColors.card,
         shape: RoundedRectangleBorder(
           borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
         ),
       ),
-      dialogTheme: DialogTheme(
+      dialogTheme: DialogThemeData(
         backgroundColor: CaliMindColors.card,
         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
       ),

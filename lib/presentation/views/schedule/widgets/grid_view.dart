@@ -1,11 +1,11 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_animate/flutter_animate.dart';
-import 'package:lucide_icons/lucide_icons.dart';
-import '../../../../core/constants/app_colors.dart';
-import '../../../../core/constants/app_typography.dart';
-import '../../../../core/constants/schedule_constants.dart';
-import '../../../../core/utils/date_time_utils.dart';
-import '../../../../domain/models/schedule_slot.dart';
+import 'package:lucide_icons_flutter/lucide_icons.dart';
+import 'package:calimind/core/constants/app_colors.dart';
+import 'package:calimind/core/constants/app_typography.dart';
+import 'package:calimind/core/constants/schedule_constants.dart';
+import 'package:calimind/core/utils/date_time_utils.dart';
+import 'package:calimind/domain/models/schedule_slot.dart';
 
 class ScheduleGridView extends StatelessWidget {
   final List<ScheduleSlot> slots;
@@ -93,14 +93,14 @@ class _QuadrantCard extends StatelessWidget {
               style: CaliMindTypography.bodySmall.copyWith(fontSize: 10),
             ),
             const SizedBox(height: 10),
-            Divider(color: CaliMindColors.cardBorder, height: 1),
+            const Divider(color: CaliMindColors.cardBorder, height: 1),
             const SizedBox(height: 10),
             Expanded(
               child: slots.isEmpty
                   ? Center(
                       child: Text('Free', style: CaliMindTypography.bodySmall.copyWith(
                         fontStyle: FontStyle.italic,
-                        color: CaliMindColors.primary.withOpacity(0.4),
+                        color: CaliMindColors.primary.withValues(alpha: 0.4),
                       )),
                     )
                   : ListView(
@@ -128,9 +128,9 @@ class _SlotPill extends StatelessWidget {
       margin: const EdgeInsets.only(bottom: 6),
       padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 5),
       decoration: BoxDecoration(
-        color: color.withOpacity(0.12),
+        color: color.withValues(alpha: 0.12),
         borderRadius: BorderRadius.circular(8),
-        border: Border.all(color: color.withOpacity(0.3)),
+        border: Border.all(color: color.withValues(alpha: 0.3)),
       ),
       child: Row(
         children: [

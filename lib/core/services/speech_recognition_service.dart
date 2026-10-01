@@ -51,12 +51,12 @@ class SpeechRecognitionService {
         onResult(result.recognizedWords, result.finalResult);
       },
       onSoundLevelChange: onSoundLevelChange,
-      pauseFor: pauseFor,
-      listenFor: listenFor,
       listenOptions: stt.SpeechListenOptions(
         partialResults: true,
         cancelOnError: true,
         listenMode: stt.ListenMode.dictation,
+        pauseFor: pauseFor,
+        listenFor: listenFor,
       ),
     );
   }

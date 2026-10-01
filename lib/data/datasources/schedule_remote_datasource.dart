@@ -1,9 +1,7 @@
 import 'package:flutter/foundation.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
-import '../../core/network/supabase_client.dart';
-import '../../domain/models/schedule_slot.dart';
-import '../../domain/models/task.dart';
-import '../../domain/use_cases/generate_schedule_use_case.dart';
+import 'package:calimind/core/network/supabase_client.dart';
+import 'package:calimind/domain/models/schedule_slot.dart';
 
 abstract class ScheduleRemoteDatasource {
   Future<List<ScheduleSlot>> fetchSlotsForDate(String date);
@@ -13,7 +11,6 @@ abstract class ScheduleRemoteDatasource {
 
 class ScheduleRemoteDatasourceImpl implements ScheduleRemoteDatasource {
   final Map<String, List<ScheduleSlot>> _mockSchedule = {};
-  final GenerateScheduleUseCase _scheduler = GenerateScheduleUseCase();
 
   SupabaseClient? get _client {
     try {

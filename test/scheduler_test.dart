@@ -1,6 +1,5 @@
 import 'package:flutter_test/flutter_test.dart';
 import 'package:calimind/domain/models/task.dart';
-import 'package:calimind/domain/models/schedule_slot.dart';
 import 'package:calimind/domain/use_cases/generate_schedule_use_case.dart';
 import 'package:calimind/domain/use_cases/parse_voice_command_use_case.dart';
 import 'package:calimind/domain/models/parsed_command.dart';
@@ -89,9 +88,10 @@ void main() {
     });
 
     test('Diagnostic Integrity: passed deadline tasks have explanatory reason', () {
-      final yesterday = DateTime.now().subtract(const Duration(days: 1));
+      final target = DateTime.parse('${testDate}T12:00:00Z');
+      final pastDeadline = target.subtract(const Duration(days: 1));
       final tasks = [
-        _mockTask(id: '1', title: 'Overdue Task', category: TaskCategory.personal, duration: 30, deadline: yesterday),
+        _mockTask(id: '1', title: 'Overdue Task', category: TaskCategory.personal, duration: 30, deadline: pastDeadline),
       ];
 
       final result = scheduler.execute(tasks, testDate);

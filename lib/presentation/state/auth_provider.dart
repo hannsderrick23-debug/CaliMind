@@ -1,8 +1,7 @@
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
-import '../../core/network/supabase_client.dart';
-import '../../core/services/biometric_service.dart';
-import '../../data/datasources/audit_remote_datasource.dart';
+import 'package:calimind/core/services/biometric_service.dart';
+import 'package:calimind/data/datasources/audit_remote_datasource.dart';
 
 enum AuthStatus { unknown, unauthenticated, authenticated, mfaRequired }
 

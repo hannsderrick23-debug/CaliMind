@@ -1,5 +1,5 @@
-import '../../data/datasources/task_remote_datasource.dart';
-import '../../domain/models/task.dart';
+import 'package:calimind/data/datasources/task_remote_datasource.dart';
+import 'package:calimind/domain/models/task.dart';
 
 class TaskRepositoryImpl {
   final TaskRemoteDatasource _datasource;

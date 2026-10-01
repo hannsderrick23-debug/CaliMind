@@ -1,7 +1,7 @@
 import 'package:flutter/foundation.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
-import '../../core/network/supabase_client.dart';
-import '../../domain/models/profile.dart';
+import 'package:calimind/core/network/supabase_client.dart';
+import 'package:calimind/domain/models/profile.dart';
 
 abstract class ProfileRemoteDatasource {
   Future<PrivacyProfile> fetchProfile();
@@ -40,7 +40,7 @@ class ProfileRemoteDatasourceImpl implements ProfileRemoteDatasource {
     if (client != null && uid != null && uid != 'mock-user') {
       try {
         final res = await client.from('profiles').select().eq('user_id', uid).maybeSingle();
-        if (res != null) return PrivacyProfile.fromJson(res as Map<String, dynamic>);
+        if (res != null) return PrivacyProfile.fromJson(res);
       } catch (e) {
         debugPrint('Fetch profile remote error: $e');
       }
@@ -55,7 +55,7 @@ class ProfileRemoteDatasourceImpl implements ProfileRemoteDatasource {
     if (client != null && uid != null && uid != 'mock-user') {
       try {
         final res = await client.from('profiles').upsert(profile.toJson()).eq('user_id', uid).select().single();
-        return PrivacyProfile.fromJson(res as Map<String, dynamic>);
+        return PrivacyProfile.fromJson(res);
       } catch (e) {
         debugPrint('Update profile remote error: $e');
       }

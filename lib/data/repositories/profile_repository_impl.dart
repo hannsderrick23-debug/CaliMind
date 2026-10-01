@@ -1,5 +1,5 @@
-import '../../data/datasources/profile_remote_datasource.dart';
-import '../../domain/models/profile.dart';
+import 'package:calimind/data/datasources/profile_remote_datasource.dart';
+import 'package:calimind/domain/models/profile.dart';
 
 class ProfileRepositoryImpl {
   final ProfileRemoteDatasource _datasource;

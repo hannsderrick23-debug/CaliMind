@@ -1,13 +1,12 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_animate/flutter_animate.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import 'package:lucide_icons/lucide_icons.dart';
-import '../../../core/constants/app_colors.dart';
-import '../../../core/constants/app_typography.dart';
-import '../../../core/utils/haptic_feedback_utils.dart';
-import '../../../domain/models/task.dart';
-import '../../state/role_focus_provider.dart';
-import '../../state/task_provider.dart';
+import 'package:lucide_icons_flutter/lucide_icons.dart';
+import 'package:calimind/core/constants/app_colors.dart';
+import 'package:calimind/core/constants/app_typography.dart';
+import 'package:calimind/domain/models/task.dart';
+import 'package:calimind/presentation/state/role_focus_provider.dart';
+import 'package:calimind/presentation/state/task_provider.dart';
 import 'task_input_sheet.dart';
 import 'widgets/task_card.dart';
 
@@ -140,7 +139,7 @@ class _SectionHeader extends StatelessWidget {
         Container(
           padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 1),
           decoration: BoxDecoration(
-            color: color.withOpacity(0.12),
+            color: color.withValues(alpha: 0.12),
             borderRadius: BorderRadius.circular(8),
           ),
           child: Text('$count', style: CaliMindTypography.bodySmall.copyWith(

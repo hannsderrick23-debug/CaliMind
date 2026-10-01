@@ -1,10 +1,10 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_animate/flutter_animate.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import 'package:lucide_icons/lucide_icons.dart';
-import '../../core/constants/app_colors.dart';
-import '../../core/constants/app_typography.dart';
-import '../state/auth_provider.dart';
+import 'package:lucide_icons_flutter/lucide_icons.dart';
+import 'package:calimind/core/constants/app_colors.dart';
+import 'package:calimind/core/constants/app_typography.dart';
+import 'package:calimind/presentation/state/auth_provider.dart';
 
 class AuthScreen extends ConsumerStatefulWidget {
   const AuthScreen({super.key});
@@ -100,7 +100,7 @@ class _AuthScreenState extends ConsumerState<AuthScreen>
             borderRadius: BorderRadius.circular(20),
             boxShadow: [
               BoxShadow(
-                color: CaliMindColors.primary.withOpacity(0.4),
+                color: CaliMindColors.primary.withValues(alpha: 0.4),
                 blurRadius: 24,
                 spreadRadius: 2,
               ),
@@ -209,9 +209,9 @@ class _AuthScreenState extends ConsumerState<AuthScreen>
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
       decoration: BoxDecoration(
-        color: CaliMindColors.destructive.withOpacity(0.12),
+        color: CaliMindColors.destructive.withValues(alpha: 0.12),
         borderRadius: BorderRadius.circular(10),
-        border: Border.all(color: CaliMindColors.destructive.withOpacity(0.3)),
+        border: Border.all(color: CaliMindColors.destructive.withValues(alpha: 0.3)),
       ),
       child: Row(
         children: [
@@ -236,7 +236,7 @@ class _AuthScreenState extends ConsumerState<AuthScreen>
           borderRadius: BorderRadius.circular(14),
           boxShadow: [
             BoxShadow(
-              color: CaliMindColors.primary.withOpacity(0.3),
+              color: CaliMindColors.primary.withValues(alpha: 0.3),
               blurRadius: 16,
               offset: const Offset(0, 4),
             ),
@@ -262,12 +262,12 @@ class _AuthScreenState extends ConsumerState<AuthScreen>
       children: [
         Row(
           children: [
-            Expanded(child: Divider(color: CaliMindColors.cardBorder, thickness: 1)),
+            const Expanded(child: Divider(color: CaliMindColors.cardBorder, thickness: 1)),
             Padding(
               padding: const EdgeInsets.symmetric(horizontal: 14),
               child: Text('or', style: CaliMindTypography.label),
             ),
-            Expanded(child: Divider(color: CaliMindColors.cardBorder, thickness: 1)),
+            const Expanded(child: Divider(color: CaliMindColors.cardBorder, thickness: 1)),
           ],
         ),
         const SizedBox(height: 16),
@@ -277,7 +277,7 @@ class _AuthScreenState extends ConsumerState<AuthScreen>
           child: OutlinedButton(
             onPressed: _continueAsDemo,
             style: OutlinedButton.styleFrom(
-              side: BorderSide(color: CaliMindColors.primary.withOpacity(0.5)),
+              side: BorderSide(color: CaliMindColors.primary.withValues(alpha: 0.5)),
               shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
             ),
             child: Text(

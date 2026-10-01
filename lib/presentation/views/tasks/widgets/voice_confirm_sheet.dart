@@ -1,13 +1,13 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_animate/flutter_animate.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import 'package:lucide_icons/lucide_icons.dart';
-import '../../../core/constants/app_colors.dart';
-import '../../../core/constants/app_typography.dart';
-import '../../../core/utils/haptic_feedback_utils.dart';
-import '../../../domain/models/task.dart';
-import '../../state/task_provider.dart';
-import '../../state/voice_assistant_provider.dart';
+import 'package:lucide_icons_flutter/lucide_icons.dart';
+import 'package:calimind/core/constants/app_colors.dart';
+import 'package:calimind/core/constants/app_typography.dart';
+import 'package:calimind/core/utils/haptic_feedback_utils.dart';
+import 'package:calimind/domain/models/task.dart';
+import 'package:calimind/presentation/state/task_provider.dart';
+import 'package:calimind/presentation/state/voice_assistant_provider.dart';
 
 class VoiceConfirmSheet extends ConsumerStatefulWidget {
   final VoidCallback onConfirmed;
@@ -95,7 +95,36 @@ class _VoiceConfirmSheetState extends ConsumerState<VoiceConfirmSheet> {
               Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  Text('Voice Captured', style: CaliMindTypography.h3.copyWith(fontSize: 16)),
+                  Row(
+                    children: [
+                      Text('Voice Captured', style: CaliMindTypography.h3.copyWith(fontSize: 16)),
+                      Consumer(builder: (context, ref, _) {
+                        final usedAi = ref.watch(voiceAssistantProvider).usedAiParser;
+                        if (!usedAi) return const SizedBox.shrink();
+                        return Container(
+                          margin: const EdgeInsets.only(left: 8),
+                          padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                          decoration: BoxDecoration(
+                            color: CaliMindColors.primary.withValues(alpha: 0.15),
+                            borderRadius: BorderRadius.circular(6),
+                            border: Border.all(color: CaliMindColors.primary.withValues(alpha: 0.3)),
+                          ),
+                          child: Row(
+                            mainAxisSize: MainAxisSize.min,
+                            children: [
+                              const Icon(LucideIcons.sparkles, size: 10, color: CaliMindColors.primary),
+                              const SizedBox(width: 3),
+                              Text('Groq AI', style: CaliMindTypography.bodySmall.copyWith(
+                                fontSize: 9,
+                                fontWeight: FontWeight.w700,
+                                color: CaliMindColors.primary,
+                              )),
+                            ],
+                          ),
+                        );
+                      }),
+                    ],
+                  ),
                   Text('Review & confirm before saving', style: CaliMindTypography.label),
                 ],
               ),
@@ -174,7 +203,7 @@ class _VoiceConfirmSheetState extends ConsumerState<VoiceConfirmSheet> {
         Text('Category', style: CaliMindTypography.label.copyWith(fontWeight: FontWeight.w600)),
         const SizedBox(height: 8),
         DropdownButtonFormField<TaskCategory>(
-          value: _draft.category,
+          initialValue: _draft.category,
           dropdownColor: CaliMindColors.card,
           style: CaliMindTypography.bodySmall.copyWith(color: CaliMindColors.foreground),
           decoration: InputDecoration(
@@ -183,11 +212,11 @@ class _VoiceConfirmSheetState extends ConsumerState<VoiceConfirmSheet> {
             fillColor: CaliMindColors.background,
             border: OutlineInputBorder(
               borderRadius: BorderRadius.circular(10),
-              borderSide: BorderSide(color: CaliMindColors.cardBorder),
+              borderSide: const BorderSide(color: CaliMindColors.cardBorder),
             ),
             enabledBorder: OutlineInputBorder(
               borderRadius: BorderRadius.circular(10),
-              borderSide: BorderSide(color: CaliMindColors.cardBorder),
+              borderSide: const BorderSide(color: CaliMindColors.cardBorder),
             ),
           ),
           items: TaskCategory.values.map((cat) => DropdownMenuItem(
@@ -232,7 +261,7 @@ class _VoiceConfirmSheetState extends ConsumerState<VoiceConfirmSheet> {
                   margin: EdgeInsets.only(right: p < 3 ? 6 : 0),
                   padding: const EdgeInsets.symmetric(vertical: 10),
                   decoration: BoxDecoration(
-                    color: isSelected ? color.withOpacity(0.15) : CaliMindColors.background,
+                    color: isSelected ? color.withValues(alpha: 0.15) : CaliMindColors.background,
                     borderRadius: BorderRadius.circular(10),
                     border: Border.all(color: isSelected ? color : CaliMindColors.cardBorder),
                   ),
@@ -292,7 +321,7 @@ class _VoiceConfirmSheetState extends ConsumerState<VoiceConfirmSheet> {
               child: Container(
                 padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
                 decoration: BoxDecoration(
-                  color: isSelected ? CaliMindColors.primary.withOpacity(0.15) : CaliMindColors.background,
+                  color: isSelected ? CaliMindColors.primary.withValues(alpha: 0.15) : CaliMindColors.background,
                   borderRadius: BorderRadius.circular(20),
                   border: Border.all(
                     color: isSelected ? CaliMindColors.primary : CaliMindColors.cardBorder,

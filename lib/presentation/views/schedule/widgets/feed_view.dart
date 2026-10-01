@@ -1,10 +1,10 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_animate/flutter_animate.dart';
-import 'package:lucide_icons/lucide_icons.dart';
-import '../../../../core/constants/app_colors.dart';
-import '../../../../core/constants/app_typography.dart';
-import '../../../../domain/models/schedule_slot.dart';
-import '../../../../core/utils/date_time_utils.dart';
+import 'package:lucide_icons_flutter/lucide_icons.dart';
+import 'package:calimind/core/constants/app_colors.dart';
+import 'package:calimind/core/constants/app_typography.dart';
+import 'package:calimind/domain/models/schedule_slot.dart';
+import 'package:calimind/core/utils/date_time_utils.dart';
 
 class FeedView extends StatelessWidget {
   final List<ScheduleSlot> slots;
@@ -72,14 +72,14 @@ class _FeedCard extends StatelessWidget {
 
     return Container(
       decoration: BoxDecoration(
-        color: isUpNext ? CaliMindColors.primary.withOpacity(0.08) : CaliMindColors.card,
+        color: isUpNext ? CaliMindColors.primary.withValues(alpha: 0.08) : CaliMindColors.card,
         borderRadius: BorderRadius.circular(18),
         border: Border.all(
-          color: isUpNext ? CaliMindColors.primary.withOpacity(0.5) : CaliMindColors.cardBorder,
+          color: isUpNext ? CaliMindColors.primary.withValues(alpha: 0.5) : CaliMindColors.cardBorder,
           width: isUpNext ? 1.5 : 1,
         ),
         boxShadow: isUpNext
-            ? [BoxShadow(color: CaliMindColors.primary.withOpacity(0.15), blurRadius: 20, spreadRadius: 1)]
+            ? [BoxShadow(color: CaliMindColors.primary.withValues(alpha: 0.15), blurRadius: 20, spreadRadius: 1)]
             : null,
       ),
       child: Padding(
@@ -134,7 +134,7 @@ class _FeedCard extends StatelessWidget {
                 const SizedBox(width: 5),
                 Text(slot.category.label, style: CaliMindTypography.bodySmall.copyWith(color: color)),
                 const SizedBox(width: 14),
-                Icon(LucideIcons.clock, size: 12, color: CaliMindColors.mutedForeground),
+                const Icon(LucideIcons.clock, size: 12, color: CaliMindColors.mutedForeground),
                 const SizedBox(width: 5),
                 Text('${slot.startTime} – ${slot.endTime}', style: CaliMindTypography.timeMonospace.copyWith(fontSize: 12)),
                 const SizedBox(width: 14),

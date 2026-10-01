@@ -47,7 +47,7 @@ class CaliMindTypography {
         color: CaliMindColors.mutedForeground,
       );
 
-  static TextStyle get timeMonospace => GoogleFonts.jetbrainsMono(
+  static TextStyle get timeMonospace => GoogleFonts.jetBrainsMono(
         fontSize: 13,
         fontWeight: FontWeight.w600,
         color: CaliMindColors.foreground,

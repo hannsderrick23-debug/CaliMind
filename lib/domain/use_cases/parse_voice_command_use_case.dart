@@ -58,13 +58,13 @@ class VoiceParserUseCase {
 
   static TaskCategory _pickCategory(String text) {
     final lower = text.toLowerCase();
-    if (RegExp(r'(class\s*rep|class|lecture|syllabus|cohort|rep)').hasMatch(lower)) {
+    if (RegExp(r'\b(class\s*rep|class|lecture|syllabus|cohort|rep)\b').hasMatch(lower)) {
       return TaskCategory.classRep;
     }
-    if (RegExp(r'(club|president|committee|exec|treasurer|sponsor)').hasMatch(lower)) {
+    if (RegExp(r'\b(club|president|committee|exec|treasurer|sponsor)\b').hasMatch(lower)) {
       return TaskCategory.clubPresident;
     }
-    if (RegExp(r'(study|read|homework|assignment|revise|exam|quiz|math|physics|chem|calculus)').hasMatch(lower)) {
+    if (RegExp(r'\b(study|read|homework|assignment|revise|exam|quiz|math|physics|chem|calculus)\b').hasMatch(lower)) {
       return TaskCategory.study;
     }
     return TaskCategory.personal;

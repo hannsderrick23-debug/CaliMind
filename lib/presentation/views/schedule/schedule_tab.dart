@@ -1,12 +1,12 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_animate/flutter_animate.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import 'package:lucide_icons/lucide_icons.dart';
-import '../../../core/constants/app_colors.dart';
-import '../../../core/constants/app_typography.dart';
-import '../../../domain/models/schedule_slot.dart';
-import '../../state/schedule_provider.dart';
-import '../../state/task_provider.dart';
+import 'package:lucide_icons_flutter/lucide_icons.dart';
+import 'package:calimind/core/constants/app_colors.dart';
+import 'package:calimind/core/constants/app_typography.dart';
+import 'package:calimind/domain/models/schedule_slot.dart';
+import 'package:calimind/presentation/state/schedule_provider.dart';
+import 'package:calimind/presentation/state/task_provider.dart';
 import 'widgets/timeline_view.dart';
 import 'widgets/grid_view.dart';
 import 'widgets/feed_view.dart';
@@ -135,7 +135,7 @@ class _ScheduleTabState extends ConsumerState<ScheduleTab> {
         child: Row(
           mainAxisSize: MainAxisSize.min,
           children: [
-            Icon(LucideIcons.zap, size: 13, color: Colors.white),
+            const Icon(LucideIcons.zap, size: 13, color: Colors.white),
             const SizedBox(width: 5),
             Text('Generate', style: CaliMindTypography.bodySmall.copyWith(color: Colors.white, fontWeight: FontWeight.w600)),
           ],
@@ -151,9 +151,9 @@ class _ScheduleTabState extends ConsumerState<ScheduleTab> {
         margin: const EdgeInsets.symmetric(horizontal: 20, vertical: 6),
         padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
         decoration: BoxDecoration(
-          color: CaliMindColors.warning.withOpacity(0.1),
+          color: CaliMindColors.warning.withValues(alpha: 0.1),
           borderRadius: BorderRadius.circular(10),
-          border: Border.all(color: CaliMindColors.warning.withOpacity(0.4)),
+          border: Border.all(color: CaliMindColors.warning.withValues(alpha: 0.4)),
         ),
         child: Row(
           children: [

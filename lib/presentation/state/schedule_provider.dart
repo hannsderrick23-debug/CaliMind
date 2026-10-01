@@ -1,10 +1,9 @@
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import '../../core/utils/date_time_utils.dart';
-import '../../data/repositories/schedule_repository_impl.dart';
-import '../../domain/models/schedule_slot.dart';
-import '../../domain/models/task.dart';
-import '../../domain/use_cases/generate_schedule_use_case.dart';
-import 'task_provider.dart';
+import 'package:calimind/core/utils/date_time_utils.dart';
+import 'package:calimind/data/repositories/schedule_repository_impl.dart';
+import 'package:calimind/domain/models/schedule_slot.dart';
+import 'package:calimind/domain/models/task.dart';
+import 'package:calimind/domain/use_cases/generate_schedule_use_case.dart';
 
 class ScheduleState {
   final List<ScheduleSlot> slots;
@@ -44,10 +43,9 @@ class ScheduleState {
 
 class ScheduleNotifier extends StateNotifier<ScheduleState> {
   final ScheduleRepositoryImpl _repo;
-  final Ref _ref;
   final GenerateScheduleUseCase _scheduler = GenerateScheduleUseCase();
 
-  ScheduleNotifier(this._repo, this._ref)
+  ScheduleNotifier(this._repo)
       : super(ScheduleState(activeDate: DateTime.now())) {
     loadScheduleForDate(DateTimeUtils.toIsoDate(DateTime.now()));
   }
@@ -112,5 +110,5 @@ final scheduleRepositoryProvider = Provider<ScheduleRepositoryImpl>(
 
 final scheduleProvider = StateNotifierProvider<ScheduleNotifier, ScheduleState>((ref) {
   final repo = ref.watch(scheduleRepositoryProvider);
-  return ScheduleNotifier(repo, ref);
+  return ScheduleNotifier(repo);
 });

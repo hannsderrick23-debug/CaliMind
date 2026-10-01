@@ -35,14 +35,17 @@ class SecureLocalStorage extends LocalStorage {
 }
 
 class SupabaseConfig {
-  static const String defaultUrl = 'https://mock-supabase.calimind.app';
-  static const String defaultAnonKey = 'mock-anon-key-calimind';
+  static const String defaultUrl = 'https://ehntfznnwqnbfekkojcf.supabase.co';
+  static const String defaultAnonKey =
+      'sb_publishable_ChDmtcte4IKvLpOvAboh5A_v1yToL8M';
 
-  static String url = const String.fromEnvironment('SUPABASE_URL', defaultValue: defaultUrl);
-  static String anonKey = const String.fromEnvironment('SUPABASE_ANON_KEY', defaultValue: defaultAnonKey);
+  static String url =
+      const String.fromEnvironment('SUPABASE_URL', defaultValue: defaultUrl);
+  static String anonKey = const String.fromEnvironment('SUPABASE_ANON_KEY',
+      defaultValue: defaultAnonKey);
 
   static bool get isConfigured =>
-      url != defaultUrl && anonKey != defaultAnonKey;
+      url.isNotEmpty && anonKey.isNotEmpty;
 
   static SupabaseClient get client => Supabase.instance.client;
 

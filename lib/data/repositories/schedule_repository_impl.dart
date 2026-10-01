@@ -1,5 +1,5 @@
-import '../../data/datasources/schedule_remote_datasource.dart';
-import '../../domain/models/schedule_slot.dart';
+import 'package:calimind/data/datasources/schedule_remote_datasource.dart';
+import 'package:calimind/domain/models/schedule_slot.dart';
 
 class ScheduleRepositoryImpl {
   final ScheduleRemoteDatasource _datasource;

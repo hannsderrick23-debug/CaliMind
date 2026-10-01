@@ -1,13 +1,13 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_animate/flutter_animate.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import 'package:lucide_icons/lucide_icons.dart';
-import '../../../core/constants/app_colors.dart';
-import '../../../core/constants/app_typography.dart';
-import '../../../core/utils/haptic_feedback_utils.dart';
-import '../../../domain/models/task.dart';
-import '../../state/role_focus_provider.dart';
-import '../../state/task_provider.dart';
+import 'package:lucide_icons_flutter/lucide_icons.dart';
+import 'package:calimind/core/constants/app_colors.dart';
+import 'package:calimind/core/constants/app_typography.dart';
+import 'package:calimind/core/utils/haptic_feedback_utils.dart';
+import 'package:calimind/domain/models/task.dart';
+import 'package:calimind/presentation/state/role_focus_provider.dart';
+import 'package:calimind/presentation/state/task_provider.dart';
 
 class RoleFocusBar extends ConsumerWidget {
   const RoleFocusBar({super.key});
@@ -52,7 +52,7 @@ class RoleFocusBar extends ConsumerWidget {
               duration: 200.ms,
               padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
               decoration: BoxDecoration(
-                color: isSelected ? color.withOpacity(0.15) : CaliMindColors.card,
+                color: isSelected ? color.withValues(alpha: 0.15) : CaliMindColors.card,
                 borderRadius: BorderRadius.circular(22),
                 border: Border.all(
                   color: isSelected ? color : CaliMindColors.cardBorder,
@@ -75,7 +75,7 @@ class RoleFocusBar extends ConsumerWidget {
                   Container(
                     padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 1),
                     decoration: BoxDecoration(
-                      color: isSelected ? color.withOpacity(0.2) : CaliMindColors.background,
+                      color: isSelected ? color.withValues(alpha: 0.2) : CaliMindColors.background,
                       borderRadius: BorderRadius.circular(10),
                     ),
                     child: Text(

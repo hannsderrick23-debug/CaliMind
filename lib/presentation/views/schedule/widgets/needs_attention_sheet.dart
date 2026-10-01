@@ -1,9 +1,9 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_animate/flutter_animate.dart';
-import 'package:lucide_icons/lucide_icons.dart';
-import '../../../../core/constants/app_colors.dart';
-import '../../../../core/constants/app_typography.dart';
-import '../../../../domain/models/schedule_slot.dart';
+import 'package:lucide_icons_flutter/lucide_icons.dart';
+import 'package:calimind/core/constants/app_colors.dart';
+import 'package:calimind/core/constants/app_typography.dart';
+import 'package:calimind/domain/models/schedule_slot.dart';
 
 class NeedsAttentionSheet extends StatelessWidget {
   final List<UnscheduledTask> unscheduled;
@@ -37,7 +37,7 @@ class NeedsAttentionSheet extends StatelessWidget {
               Container(
                 padding: const EdgeInsets.all(8),
                 decoration: BoxDecoration(
-                  color: CaliMindColors.warning.withOpacity(0.15),
+                  color: CaliMindColors.warning.withValues(alpha: 0.15),
                   borderRadius: BorderRadius.circular(10),
                 ),
                 child: const Icon(LucideIcons.alertTriangle, color: CaliMindColors.warning, size: 18),
@@ -64,7 +64,7 @@ class NeedsAttentionSheet extends StatelessWidget {
               decoration: BoxDecoration(
                 color: CaliMindColors.background,
                 borderRadius: BorderRadius.circular(12),
-                border: Border.all(color: CaliMindColors.warning.withOpacity(0.2)),
+                border: Border.all(color: CaliMindColors.warning.withValues(alpha: 0.2)),
               ),
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,

@@ -1,6 +1,6 @@
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import '../../data/repositories/task_repository_impl.dart';
-import '../../domain/models/task.dart';
+import 'package:calimind/data/repositories/task_repository_impl.dart';
+import 'package:calimind/domain/models/task.dart';
 
 class TaskNotifier extends StateNotifier<AsyncValue<List<Task>>> {
   final TaskRepositoryImpl _repo;

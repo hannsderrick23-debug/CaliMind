@@ -6,6 +6,7 @@ build/
 .pub/
 .puro/
 .puro.json
+.flutter-plugins-dependencies
 *.lock
 !pubspec.lock
 

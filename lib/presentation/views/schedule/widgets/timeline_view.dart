@@ -1,9 +1,9 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_animate/flutter_animate.dart';
-import 'package:lucide_icons/lucide_icons.dart';
-import '../../../../core/constants/app_colors.dart';
-import '../../../../core/constants/app_typography.dart';
-import '../../../../domain/models/schedule_slot.dart';
+import 'package:lucide_icons_flutter/lucide_icons.dart';
+import 'package:calimind/core/constants/app_colors.dart';
+import 'package:calimind/core/constants/app_typography.dart';
+import 'package:calimind/domain/models/schedule_slot.dart';
 
 class TimelineView extends StatelessWidget {
   final List<ScheduleSlot> slots;
@@ -51,13 +51,13 @@ class _TimelineSlotCard extends StatelessWidget {
         borderRadius: BorderRadius.circular(14),
         border: Border(
           left: BorderSide(color: color, width: 4),
-          top: BorderSide(color: CaliMindColors.cardBorder),
-          right: BorderSide(color: CaliMindColors.cardBorder),
-          bottom: BorderSide(color: CaliMindColors.cardBorder),
+          top: const BorderSide(color: CaliMindColors.cardBorder),
+          right: const BorderSide(color: CaliMindColors.cardBorder),
+          bottom: const BorderSide(color: CaliMindColors.cardBorder),
         ),
         boxShadow: [
           BoxShadow(
-            color: color.withOpacity(0.06),
+            color: color.withValues(alpha: 0.06),
             blurRadius: 12,
             offset: const Offset(0, 2),
           ),
@@ -77,7 +77,7 @@ class _TimelineSlotCard extends StatelessWidget {
               ],
             ),
             const SizedBox(width: 14),
-            Container(width: 1, height: 32, color: color.withOpacity(0.3)),
+            Container(width: 1, height: 32, color: color.withValues(alpha: 0.3)),
             const SizedBox(width: 14),
             // Task info
             Expanded(
@@ -97,7 +97,7 @@ class _TimelineSlotCard extends StatelessWidget {
                       const SizedBox(width: 5),
                       Text(slot.category.label, style: CaliMindTypography.bodySmall.copyWith(color: color, fontSize: 11)),
                       const SizedBox(width: 10),
-                      Icon(LucideIcons.clock, size: 11, color: CaliMindColors.mutedForeground),
+                      const Icon(LucideIcons.clock, size: 11, color: CaliMindColors.mutedForeground),
                       const SizedBox(width: 4),
                       Text('${slot.duration}m', style: CaliMindTypography.bodySmall.copyWith(fontSize: 11)),
                     ],
@@ -121,19 +121,19 @@ class _BufferCard extends StatelessWidget {
       decoration: BoxDecoration(
         borderRadius: BorderRadius.circular(8),
         border: Border.all(
-          color: CaliMindColors.primary.withOpacity(0.2),
+          color: CaliMindColors.primary.withValues(alpha: 0.2),
           style: BorderStyle.solid,
         ),
       ),
       child: Row(
         children: [
-          Icon(LucideIcons.coffee, size: 11, color: CaliMindColors.primary.withOpacity(0.5)),
+          Icon(LucideIcons.coffee, size: 11, color: CaliMindColors.primary.withValues(alpha: 0.5)),
           const SizedBox(width: 8),
           Text(
             '15 min buffer',
             style: CaliMindTypography.bodySmall.copyWith(
               fontSize: 10,
-              color: CaliMindColors.primary.withOpacity(0.5),
+              color: CaliMindColors.primary.withValues(alpha: 0.5),
               fontStyle: FontStyle.italic,
             ),
           ),

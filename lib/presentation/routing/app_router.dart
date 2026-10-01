@@ -1,7 +1,6 @@
-import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import '../state/auth_provider.dart';
+import 'package:calimind/presentation/state/auth_provider.dart';
 import '../views/auth/auth_screen.dart';
 import '../views/dashboard/dashboard_screen.dart';
 import '../views/settings/settings_screen.dart';

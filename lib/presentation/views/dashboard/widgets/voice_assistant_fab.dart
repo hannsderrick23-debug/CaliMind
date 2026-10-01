@@ -1,9 +1,9 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_animate/flutter_animate.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import 'package:lucide_icons/lucide_icons.dart';
-import '../../../../core/constants/app_colors.dart';
-import '../../../state/voice_assistant_provider.dart';
+import 'package:lucide_icons_flutter/lucide_icons.dart';
+import 'package:calimind/core/constants/app_colors.dart';
+import 'package:calimind/presentation/state/voice_assistant_provider.dart';
 
 class VoiceAssistantFab extends ConsumerWidget {
   final VoidCallback onTap;
@@ -28,7 +28,7 @@ class VoiceAssistantFab extends ConsumerWidget {
               height: 80 + (level * 20),
               decoration: BoxDecoration(
                 shape: BoxShape.circle,
-                color: CaliMindColors.primary.withOpacity(0.15),
+                color: CaliMindColors.primary.withValues(alpha: 0.15),
               ),
             ).animate(onPlay: (c) => c.repeat()).scale(
                   begin: const Offset(1.0, 1.0),
@@ -43,7 +43,7 @@ class VoiceAssistantFab extends ConsumerWidget {
               height: 70,
               decoration: BoxDecoration(
                 shape: BoxShape.circle,
-                color: CaliMindColors.primary.withOpacity(0.2),
+                color: CaliMindColors.primary.withValues(alpha: 0.2),
               ),
             ).animate(onPlay: (c) => c.repeat(reverse: true)).scale(
                   begin: const Offset(1.0, 1.0),
@@ -59,7 +59,7 @@ class VoiceAssistantFab extends ConsumerWidget {
               shape: BoxShape.circle,
               boxShadow: [
                 BoxShadow(
-                  color: CaliMindColors.primary.withOpacity(isListening ? 0.6 : 0.35),
+                  color: CaliMindColors.primary.withValues(alpha: isListening ? 0.6 : 0.35),
                   blurRadius: isListening ? 28 : 18,
                   spreadRadius: isListening ? 3 : 1,
                 ),

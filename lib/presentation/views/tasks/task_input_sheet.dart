@@ -1,12 +1,12 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_animate/flutter_animate.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import 'package:lucide_icons/lucide_icons.dart';
-import '../../../core/constants/app_colors.dart';
-import '../../../core/constants/app_typography.dart';
-import '../../../core/utils/haptic_feedback_utils.dart';
-import '../../../domain/models/task.dart';
-import '../../state/task_provider.dart';
+import 'package:lucide_icons_flutter/lucide_icons.dart';
+import 'package:calimind/core/constants/app_colors.dart';
+import 'package:calimind/core/constants/app_typography.dart';
+import 'package:calimind/core/utils/haptic_feedback_utils.dart';
+import 'package:calimind/domain/models/task.dart';
+import 'package:calimind/presentation/state/task_provider.dart';
 
 class TaskInputSheet extends ConsumerStatefulWidget {
   final Task? taskToEdit;
@@ -191,7 +191,7 @@ class _TaskInputSheetState extends ConsumerState<TaskInputSheet> {
                   borderRadius: BorderRadius.circular(14),
                   boxShadow: [
                     BoxShadow(
-                      color: CaliMindColors.primary.withOpacity(0.3),
+                      color: CaliMindColors.primary.withValues(alpha: 0.3),
                       blurRadius: 16,
                       offset: const Offset(0, 4),
                     ),
@@ -268,7 +268,7 @@ class _TaskInputSheetState extends ConsumerState<TaskInputSheet> {
             duration: const Duration(milliseconds: 180),
             padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 7),
             decoration: BoxDecoration(
-              color: isSelected ? cat.color.withOpacity(0.15) : CaliMindColors.background,
+              color: isSelected ? cat.color.withValues(alpha: 0.15) : CaliMindColors.background,
               borderRadius: BorderRadius.circular(20),
               border: Border.all(
                 color: isSelected ? cat.color : CaliMindColors.cardBorder,
@@ -354,7 +354,7 @@ class _TaskInputSheetState extends ConsumerState<TaskInputSheet> {
                   margin: EdgeInsets.only(right: p < 3 ? 4 : 0),
                   padding: const EdgeInsets.symmetric(vertical: 10),
                   decoration: BoxDecoration(
-                    color: isSelected ? color.withOpacity(0.15) : CaliMindColors.background,
+                    color: isSelected ? color.withValues(alpha: 0.15) : CaliMindColors.background,
                     borderRadius: BorderRadius.circular(10),
                     border: Border.all(
                       color: isSelected ? color : CaliMindColors.cardBorder,
@@ -415,7 +415,7 @@ class _TimeChip extends StatelessWidget {
         duration: const Duration(milliseconds: 180),
         padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
         decoration: BoxDecoration(
-          color: isSelected ? CaliMindColors.primary.withOpacity(0.15) : CaliMindColors.background,
+          color: isSelected ? CaliMindColors.primary.withValues(alpha: 0.15) : CaliMindColors.background,
           borderRadius: BorderRadius.circular(20),
           border: Border.all(
             color: isSelected ? CaliMindColors.primary : CaliMindColors.cardBorder,

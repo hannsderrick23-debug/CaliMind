@@ -1,7 +1,7 @@
 import 'package:flutter/foundation.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
-import '../../core/network/supabase_client.dart';
-import '../../domain/models/audit_log.dart';
+import 'package:calimind/core/network/supabase_client.dart';
+import 'package:calimind/domain/models/audit_log.dart';
 
 abstract class AuditRemoteDatasource {
   Future<List<AuditLog>> fetchAuditLogs({int limit = 50});

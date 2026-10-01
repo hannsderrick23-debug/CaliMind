@@ -1,14 +1,16 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
-import 'package:lucide_icons/lucide_icons.dart';
+import 'package:lucide_icons_flutter/lucide_icons.dart';
 import 'package:intl/intl.dart';
-import '../../../core/constants/app_colors.dart';
-import '../../../core/constants/app_typography.dart';
-import '../../../core/utils/haptic_feedback_utils.dart';
-import '../../state/schedule_provider.dart';
-import '../../state/voice_assistant_provider.dart';
-import '../../state/task_provider.dart';
+import 'package:calimind/core/constants/app_colors.dart';
+import 'package:calimind/core/constants/app_typography.dart';
+import 'package:calimind/core/utils/haptic_feedback_utils.dart';
+import 'package:calimind/domain/models/parsed_command.dart';
+import 'package:calimind/presentation/state/role_focus_provider.dart';
+import 'package:calimind/presentation/state/schedule_provider.dart';
+import 'package:calimind/presentation/state/voice_assistant_provider.dart';
+import 'package:calimind/presentation/state/task_provider.dart';
 import '../schedule/schedule_tab.dart';
 import '../tasks/task_input_sheet.dart';
 import '../tasks/task_list_tab.dart';
@@ -43,22 +45,11 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen>
 
   Future<void> _handleFabTap() async {
     final voice = ref.read(voiceAssistantProvider);
+    final activeRole = ref.read(roleFocusProvider)?.label;
     if (voice.voiceState == VoiceState.listening) {
-      await ref.read(voiceAssistantProvider.notifier).stopListening();
+      await ref.read(voiceAssistantProvider.notifier).stopListening(currentFocusRole: activeRole);
     } else {
-      await ref.read(voiceAssistantProvider.notifier).startListening();
-    }
-  }
-
-  void _checkForParsedCommand() {
-    final voice = ref.read(voiceAssistantProvider);
-    if (voice.draftTask != null && !_showVoiceSheet) {
-      setState(() => _showVoiceSheet = true);
-    } else if (voice.parsedCommand is GenerateScheduleCommand && !_showVoiceSheet) {
-      final tasks = ref.read(taskProvider).valueOrNull ?? [];
-      ref.read(scheduleProvider.notifier).generateSchedule(tasks);
-      ref.read(voiceAssistantProvider.notifier).dismiss();
-      _tabController.animateTo(1); // Switch to schedule tab
+      await ref.read(voiceAssistantProvider.notifier).startListening(currentFocusRole: activeRole);
     }
   }
 
@@ -238,14 +229,14 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen>
           labelColor: Colors.white,
           unselectedLabelColor: CaliMindColors.mutedForeground,
           dividerColor: Colors.transparent,
-          tabs: [
+          tabs: const [
             Tab(
               child: Row(
                 mainAxisSize: MainAxisSize.min,
                 children: [
                   Icon(LucideIcons.listTodo, size: 13),
-                  const SizedBox(width: 5),
-                  const Text('Tasks'),
+                  SizedBox(width: 5),
+                  Text('Tasks'),
                 ],
               ),
             ),
@@ -254,8 +245,8 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen>
                 mainAxisSize: MainAxisSize.min,
                 children: [
                   Icon(LucideIcons.calendarDays, size: 13),
-                  const SizedBox(width: 5),
-                  const Text('Schedule'),
+                  SizedBox(width: 5),
+                  Text('Schedule'),
                 ],
               ),
             ),
@@ -268,7 +259,7 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen>
   Widget _buildBottomBar() {
     return Container(
       height: 90,
-      decoration: BoxDecoration(
+      decoration: const BoxDecoration(
         color: CaliMindColors.background,
         border: Border(top: BorderSide(color: CaliMindColors.cardBorder)),
       ),

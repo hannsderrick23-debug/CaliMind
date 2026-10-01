@@ -1,13 +1,13 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_animate/flutter_animate.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import 'package:lucide_icons/lucide_icons.dart';
+import 'package:lucide_icons_flutter/lucide_icons.dart';
 import 'package:share_plus/share_plus.dart';
-import '../../../core/constants/app_colors.dart';
-import '../../../core/constants/app_typography.dart';
-import '../../../core/utils/haptic_feedback_utils.dart';
-import '../../../domain/models/task.dart';
-import '../../state/task_provider.dart';
+import 'package:calimind/core/constants/app_colors.dart';
+import 'package:calimind/core/constants/app_typography.dart';
+import 'package:calimind/core/utils/haptic_feedback_utils.dart';
+import 'package:calimind/domain/models/task.dart';
+import 'package:calimind/presentation/state/task_provider.dart';
 
 class TaskCard extends ConsumerWidget {
   final Task task;
@@ -30,7 +30,7 @@ class TaskCard extends ConsumerWidget {
         alignment: Alignment.centerRight,
         padding: const EdgeInsets.only(right: 24),
         decoration: BoxDecoration(
-          color: CaliMindColors.destructive.withOpacity(0.15),
+          color: CaliMindColors.destructive.withValues(alpha: 0.15),
           borderRadius: BorderRadius.circular(16),
         ),
         child: const Icon(LucideIcons.trash2, color: CaliMindColors.destructive, size: 22),
@@ -42,9 +42,9 @@ class TaskCard extends ConsumerWidget {
           borderRadius: BorderRadius.circular(16),
           border: Border(
             left: BorderSide(color: color, width: 3.5),
-            top: BorderSide(color: CaliMindColors.cardBorder),
-            right: BorderSide(color: CaliMindColors.cardBorder),
-            bottom: BorderSide(color: CaliMindColors.cardBorder),
+            top: const BorderSide(color: CaliMindColors.cardBorder),
+            right: const BorderSide(color: CaliMindColors.cardBorder),
+            bottom: const BorderSide(color: CaliMindColors.cardBorder),
           ),
         ),
         child: InkWell(
@@ -106,7 +106,7 @@ class TaskCard extends ConsumerWidget {
                         children: [
                           _CategoryBadge(category: task.category),
                           const SizedBox(width: 8),
-                          Icon(LucideIcons.clock, size: 11, color: CaliMindColors.mutedForeground),
+                          const Icon(LucideIcons.clock, size: 11, color: CaliMindColors.mutedForeground),
                           const SizedBox(width: 4),
                           Text(
                             _formatDuration(task.duration),
@@ -114,7 +114,7 @@ class TaskCard extends ConsumerWidget {
                           ),
                           if (task.specificTime != null) ...[
                             const SizedBox(width: 8),
-                            Icon(LucideIcons.alarm, size: 11, color: CaliMindColors.mutedForeground),
+                            const Icon(LucideIcons.alarmClock, size: 11, color: CaliMindColors.mutedForeground),
                             const SizedBox(width: 4),
                             Text(task.specificTime!, style: CaliMindTypography.timeMonospace.copyWith(fontSize: 11)),
                           ],
@@ -123,7 +123,7 @@ class TaskCard extends ConsumerWidget {
                           if (task.category == TaskCategory.classRep)
                             GestureDetector(
                               onTap: () => _shareAnnouncement(context),
-                              child: Icon(LucideIcons.share2, size: 15, color: CaliMindColors.catClass),
+                              child: const Icon(LucideIcons.share2, size: 15, color: CaliMindColors.catClass),
                             ),
                         ],
                       ),
@@ -166,9 +166,9 @@ class _PriorityBadge extends StatelessWidget {
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
       decoration: BoxDecoration(
-        color: color.withOpacity(0.12),
+        color: color.withValues(alpha: 0.12),
         borderRadius: BorderRadius.circular(6),
-        border: Border.all(color: color.withOpacity(0.3)),
+        border: Border.all(color: color.withValues(alpha: 0.3)),
       ),
       child: Text(
         label,
