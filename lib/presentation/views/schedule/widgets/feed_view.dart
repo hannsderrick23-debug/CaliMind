@@ -8,8 +8,9 @@ import 'package:calimind/core/utils/date_time_utils.dart';
 
 class FeedView extends StatelessWidget {
   final List<ScheduleSlot> slots;
+  final ValueChanged<ScheduleSlot>? onSlotTap;
 
-  const FeedView({super.key, required this.slots});
+  const FeedView({super.key, required this.slots, this.onSlotTap});
 
   int _currentSlotIndex() {
     final now = DateTime.now();
@@ -47,6 +48,7 @@ class FeedView extends StatelessWidget {
           index: index,
           isUpNext: isUpNext,
           isDone: isDone,
+          onTap: onSlotTap == null ? null : () => onSlotTap!(slot),
         );
       },
     );
@@ -58,42 +60,44 @@ class _FeedCard extends StatelessWidget {
   final int index;
   final bool isUpNext;
   final bool isDone;
+  final VoidCallback? onTap;
 
   const _FeedCard({
     required this.slot,
     required this.index,
     required this.isUpNext,
     required this.isDone,
+    required this.onTap,
   });
 
   @override
   Widget build(BuildContext context) {
     final color = slot.category.color;
 
-    return Container(
-      decoration: BoxDecoration(
-        color: isUpNext ? CaliMindColors.primary.withValues(alpha: 0.08) : CaliMindColors.card,
-        borderRadius: BorderRadius.circular(18),
-        border: Border.all(
-          color: isUpNext ? CaliMindColors.primary.withValues(alpha: 0.5) : CaliMindColors.cardBorder,
-          width: isUpNext ? 1.5 : 1,
+    return GestureDetector(
+      behavior: HitTestBehavior.opaque,
+      onTap: onTap,
+      child: Container(
+        decoration: BoxDecoration(
+          color: isUpNext ? CaliMindColors.primary.withValues(alpha: 0.08) : CaliMindColors.card,
+          borderRadius: BorderRadius.circular(18),
+          border: Border.all(
+            color: isUpNext ? CaliMindColors.primary.withValues(alpha: 0.5) : CaliMindColors.cardBorder,
+            width: isUpNext ? 1.5 : 1,
+          ),
         ),
-        boxShadow: isUpNext
-            ? [BoxShadow(color: CaliMindColors.primary.withValues(alpha: 0.15), blurRadius: 20, spreadRadius: 1)]
-            : null,
-      ),
-      child: Padding(
-        padding: const EdgeInsets.all(18),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
+        child: Padding(
+          padding: const EdgeInsets.all(18),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
             // Up Next badge
             if (isUpNext)
               Container(
                 margin: const EdgeInsets.only(bottom: 12),
                 padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
                 decoration: BoxDecoration(
-                  gradient: CaliMindColors.mindGradient,
+                  color: CaliMindColors.primary,
                   borderRadius: BorderRadius.circular(20),
                 ),
                 child: Row(
@@ -109,7 +113,7 @@ class _FeedCard extends StatelessWidget {
                     )),
                   ],
                 ),
-              ).animate(onPlay: (c) => c.repeat(reverse: true)).shimmer(duration: 1500.ms),
+              ),
             // Title row
             Row(
               children: [
@@ -118,30 +122,41 @@ class _FeedCard extends StatelessWidget {
                     slot.taskTitle,
                     style: CaliMindTypography.h3.copyWith(
                       fontSize: isUpNext ? 18 : 15,
-                      color: isDone ? CaliMindColors.mutedForeground : CaliMindColors.foreground,
+                      color: CaliMindColors.foreground,
                       decoration: isDone ? TextDecoration.lineThrough : null,
                     ),
+                    maxLines: 2,
+                    overflow: TextOverflow.ellipsis,
                   ),
                 ),
                 if (isDone)
                   const Icon(LucideIcons.checkCircle2, size: 18, color: CaliMindColors.success),
+                if (onTap != null)
+                  const Padding(
+                    padding: EdgeInsets.only(left: 8),
+                    child: Icon(
+                      LucideIcons.moreVertical,
+                      size: 18,
+                      color: CaliMindColors.mutedForeground,
+                    ),
+                  ),
               ],
             ),
             const SizedBox(height: 10),
-            Row(
+            Wrap(
+              spacing: 14,
+              runSpacing: 6,
+              crossAxisAlignment: WrapCrossAlignment.center,
               children: [
                 Icon(slot.category.icon, size: 12, color: color),
-                const SizedBox(width: 5),
                 Text(slot.category.label, style: CaliMindTypography.bodySmall.copyWith(color: color)),
-                const SizedBox(width: 14),
                 const Icon(LucideIcons.clock, size: 12, color: CaliMindColors.mutedForeground),
-                const SizedBox(width: 5),
                 Text('${slot.startTime} – ${slot.endTime}', style: CaliMindTypography.timeMonospace.copyWith(fontSize: 12)),
-                const SizedBox(width: 14),
                 Text('${slot.duration}m', style: CaliMindTypography.bodySmall.copyWith(fontSize: 11)),
               ],
             ),
-          ],
+            ],
+          ),
         ),
       ),
     ).animate(delay: Duration(milliseconds: index * 60)).fadeIn(duration: 350.ms).slideY(begin: 0.05);

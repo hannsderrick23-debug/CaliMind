@@ -1,5 +1,4 @@
 import 'package:flutter/material.dart';
-import 'package:flutter_animate/flutter_animate.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:lucide_icons_flutter/lucide_icons.dart';
 import 'package:calimind/core/constants/app_colors.dart';
@@ -14,64 +13,74 @@ class VoiceAssistantFab extends ConsumerWidget {
   Widget build(BuildContext context, WidgetRef ref) {
     final voiceState = ref.watch(voiceAssistantProvider);
     final isListening = voiceState.voiceState == VoiceState.listening;
-    final level = voiceState.soundLevel;
+    final isProcessing = voiceState.voiceState == VoiceState.processing;
+    final label = isListening
+        ? 'Stop voice recording'
+        : isProcessing
+            ? 'Voice request processing'
+            : 'Start voice recording';
 
-    return GestureDetector(
-      onTap: onTap,
-      child: Stack(
-        alignment: Alignment.center,
-        children: [
-          // Outer pulse ring (animated when listening)
-          if (isListening)
-            Container(
-              width: 80 + (level * 20),
-              height: 80 + (level * 20),
-              decoration: BoxDecoration(
-                shape: BoxShape.circle,
-                color: CaliMindColors.primary.withValues(alpha: 0.15),
+    return Semantics(
+      button: true,
+      label: label,
+      child: Tooltip(
+        message: label,
+        child: Material(
+          color: Colors.transparent,
+          child: InkResponse(
+            onTap: isProcessing ? null : onTap,
+            radius: 40,
+            child: SizedBox(
+              width: 58,
+              height: 58,
+              child: Stack(
+                alignment: Alignment.center,
+                clipBehavior: Clip.none,
+                children: [
+                  if (isListening)
+                    Container(
+                      width: 76,
+                      height: 76,
+                      decoration: BoxDecoration(
+                        shape: BoxShape.circle,
+                        color: CaliMindColors.destructive
+                            .withValues(alpha: 0.10),
+                        border: Border.all(
+                          color: CaliMindColors.destructive
+                              .withValues(alpha: 0.35),
+                        ),
+                      ),
+                    ),
+                  Container(
+                    width: 54,
+                    height: 54,
+                    decoration: BoxDecoration(
+                      color: isListening
+                          ? CaliMindColors.destructive
+                          : CaliMindColors.primary,
+                      shape: BoxShape.circle,
+                    ),
+                    alignment: Alignment.center,
+                    child: isProcessing
+                        ? const SizedBox(
+                            width: 22,
+                            height: 22,
+                            child: CircularProgressIndicator(
+                              color: Colors.white,
+                              strokeWidth: 2.5,
+                            ),
+                          )
+                        : Icon(
+                            LucideIcons.mic,
+                            color: Colors.white,
+                            size: 24,
+                          ),
+                  ),
+                ],
               ),
-            ).animate(onPlay: (c) => c.repeat()).scale(
-                  begin: const Offset(1.0, 1.0),
-                  end: const Offset(1.2, 1.2),
-                  duration: 900.ms,
-                  curve: Curves.easeInOut,
-                ),
-          // Middle ring
-          if (isListening)
-            Container(
-              width: 70,
-              height: 70,
-              decoration: BoxDecoration(
-                shape: BoxShape.circle,
-                color: CaliMindColors.primary.withValues(alpha: 0.2),
-              ),
-            ).animate(onPlay: (c) => c.repeat(reverse: true)).scale(
-                  begin: const Offset(1.0, 1.0),
-                  end: const Offset(1.08, 1.08),
-                  duration: 700.ms,
-                ),
-          // Main FAB button
-          Container(
-            width: 62,
-            height: 62,
-            decoration: BoxDecoration(
-              gradient: CaliMindColors.mindGradient,
-              shape: BoxShape.circle,
-              boxShadow: [
-                BoxShadow(
-                  color: CaliMindColors.primary.withValues(alpha: isListening ? 0.6 : 0.35),
-                  blurRadius: isListening ? 28 : 18,
-                  spreadRadius: isListening ? 3 : 1,
-                ),
-              ],
-            ),
-            child: Icon(
-              isListening ? LucideIcons.micOff : LucideIcons.mic,
-              color: Colors.white,
-              size: 26,
             ),
           ),
-        ],
+        ),
       ),
     );
   }

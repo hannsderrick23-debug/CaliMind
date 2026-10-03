@@ -36,33 +36,35 @@ class SecureLocalStorage extends LocalStorage {
 
 class SupabaseConfig {
   static const String defaultUrl = 'https://ehntfznnwqnbfekkojcf.supabase.co';
-  static const String defaultAnonKey =
+  static const String defaultPublishableKey =
       'sb_publishable_ChDmtcte4IKvLpOvAboh5A_v1yToL8M';
 
   static String url =
       const String.fromEnvironment('SUPABASE_URL', defaultValue: defaultUrl);
-  static String anonKey = const String.fromEnvironment('SUPABASE_ANON_KEY',
-      defaultValue: defaultAnonKey);
+  static String publishableKey = const String.fromEnvironment(
+    'SUPABASE_ANON_KEY',
+    defaultValue: defaultPublishableKey,
+  );
 
-  static bool get isConfigured =>
-      url.isNotEmpty && anonKey.isNotEmpty;
+  static bool get isConfigured => url.isNotEmpty && publishableKey.isNotEmpty;
 
   static SupabaseClient get client => Supabase.instance.client;
 
-  static Future<void> initialize({String? customUrl, String? customAnonKey}) async {
+  static Future<void> initialize({
+    String? customUrl,
+    String? customPublishableKey,
+  }) async {
     final effectiveUrl = customUrl ?? url;
-    final effectiveKey = customAnonKey ?? anonKey;
-    
-    try {
-      await Supabase.initialize(
-        url: effectiveUrl,
-        anonKey: effectiveKey,
-        authOptions: FlutterAuthClientOptions(
-          localStorage: SecureLocalStorage(),
-        ),
-      );
-    } catch (_) {
-      // Supabase already initialized or network mock fallback
-    }
+    final effectiveKey = customPublishableKey ?? publishableKey;
+    url = effectiveUrl;
+    publishableKey = effectiveKey;
+
+    await Supabase.initialize(
+      url: effectiveUrl,
+      publishableKey: effectiveKey,
+      authOptions: FlutterAuthClientOptions(
+        localStorage: SecureLocalStorage(),
+      ),
+    );
   }
 }

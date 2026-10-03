@@ -1,46 +1,41 @@
 import 'package:flutter/material.dart';
 
 class CaliMindColors {
-  // Core Background & Surfaces
-  static const Color background = Color(0xFF12161F);
-  static const Color card = Color(0xFF191E2B);
-  static const Color cardBorder = Color(0x14FFFFFF); // 8% white
-  static const Color cardFocusBorder = Color(0x8C7C6EED);
-  static const Color surfaceOverlay = Color(0x99191E2B);
+  static const Color background = Color(0xFFF7F4FA);
+  static const Color card = Color(0xFFFFFFFF);
+  static const Color cardBorder = Color(0xFFE5DDEB);
+  static const Color cardFocusBorder = Color(0xFF6C2198);
+  static const Color surfaceOverlay = Color(0xFFF2ECF7);
 
-  // Typography
-  static const Color foreground = Color(0xFFF5F6F9);
-  static const Color mutedForeground = Color(0xFFA5ABB8);
+  static const Color foreground = Color(0xFF281D30);
+  static const Color mutedForeground = Color(0xFF65596D);
 
-  // Brand Accents
-  static const Color primary = Color(0xFF7C6EED); // Mind Indigo
-  static const Color primaryVariant = Color(0xFF6366F1);
-  static const Color accent = Color(0xFF2DD4BF); // Mind Teal
-  static const Color destructive = Color(0xFFF43F5E); // Rose Red
-  static const Color warning = Color(0xFFFBBF24); // Amber
-  static const Color success = Color(0xFF10B981); // Emerald Green
+  static const Color primary = Color(0xFF641A91);
+  static const Color primaryVariant = Color(0xFF4C0C74);
+  static const Color accent = Color(0xFF813CAC);
+  static const Color destructive = Color(0xFFB93848);
+  static const Color warning = Color(0xFF8A5A00);
+  static const Color success = Color(0xFF287A55);
 
-  // Role Category Accents
-  static const Color catClass = Color(0xFF3B82F6); // Class Rep (Electric Blue)
-  static const Color catClub = Color(0xFFD946EF); // Club President (Vibrant Purple)
-  static const Color catStudy = Color(0xFF10B981); // Study (Emerald)
-  static const Color catPersonal = Color(0xFFF59E0B); // Personal (Warm Amber)
+  static const Color catClass = Color(0xFF326A9D);
+  static const Color catClub = Color(0xFF70428F);
+  static const Color catStudy = Color(0xFF287A55);
+  static const Color catPersonal = Color(0xFF9A6700);
 
-  // Gradients
   static const LinearGradient mindGradient = LinearGradient(
-    colors: [Color(0xFF6366F1), Color(0xFF14B8A6)],
+    colors: [Color(0xFF641A91), Color(0xFF641A91)],
     begin: Alignment.topLeft,
     end: Alignment.bottomRight,
   );
 
   static const LinearGradient cardGlowGradient = LinearGradient(
-    colors: [Color(0x337C6EED), Color(0x112DD4BF)],
+    colors: [Color(0xFFF2ECF7), Color(0xFFF7F4FA)],
     begin: Alignment.topLeft,
     end: Alignment.bottomRight,
   );
 
   static const LinearGradient fabPulseGradient = LinearGradient(
-    colors: [Color(0xFF7C6EED), Color(0xFF2DD4BF)],
+    colors: [Color(0xFF641A91), Color(0xFF641A91)],
     begin: Alignment.topCenter,
     end: Alignment.bottomCenter,
   );

@@ -15,24 +15,38 @@ class CaliMindApp extends ConsumerWidget {
     return MaterialApp.router(
       title: 'CaliMind',
       debugShowCheckedModeBanner: false,
-      themeMode: ThemeMode.dark,
-      darkTheme: _buildDarkTheme(),
+      theme: _buildTheme(),
       routerConfig: router,
     );
   }
 
-  ThemeData _buildDarkTheme() {
-    return ThemeData.dark(useMaterial3: true).copyWith(
+  ThemeData _buildTheme() {
+    return ThemeData.light(useMaterial3: true).copyWith(
       scaffoldBackgroundColor: CaliMindColors.background,
-      colorScheme: const ColorScheme.dark(
+      colorScheme: const ColorScheme.light(
         primary: CaliMindColors.primary,
         secondary: CaliMindColors.accent,
         surface: CaliMindColors.card,
         error: CaliMindColors.destructive,
         onPrimary: Colors.white,
+        onSecondary: Colors.white,
+        onError: Colors.white,
         onSurface: CaliMindColors.foreground,
       ),
       textTheme: CaliMindTypography.textTheme,
+      floatingActionButtonTheme: const FloatingActionButtonThemeData(
+        backgroundColor: CaliMindColors.primary,
+        foregroundColor: Colors.white,
+        elevation: 0,
+        focusElevation: 0,
+        hoverElevation: 0,
+      ),
+      snackBarTheme: SnackBarThemeData(
+        backgroundColor: CaliMindColors.foreground,
+        contentTextStyle: GoogleFonts.inter(color: Colors.white),
+        behavior: SnackBarBehavior.floating,
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+      ),
       cardTheme: CardThemeData(
         color: CaliMindColors.card,
         shape: RoundedRectangleBorder(
@@ -64,7 +78,7 @@ class CaliMindApp extends ConsumerWidget {
       ),
       inputDecorationTheme: InputDecorationTheme(
         filled: true,
-        fillColor: CaliMindColors.background,
+        fillColor: CaliMindColors.card,
         hintStyle: GoogleFonts.inter(color: CaliMindColors.mutedForeground, fontSize: 14),
         border: OutlineInputBorder(
           borderRadius: BorderRadius.circular(12),
@@ -81,12 +95,15 @@ class CaliMindApp extends ConsumerWidget {
       ),
       elevatedButtonTheme: ElevatedButtonThemeData(
         style: ElevatedButton.styleFrom(
+          foregroundColor: Colors.white,
+          backgroundColor: CaliMindColors.primary,
           minimumSize: const Size(48, 48),
           shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
         ),
       ),
       outlinedButtonTheme: OutlinedButtonThemeData(
         style: OutlinedButton.styleFrom(
+          foregroundColor: CaliMindColors.foreground,
           minimumSize: const Size(48, 48),
           shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
           side: const BorderSide(color: CaliMindColors.cardBorder),
@@ -109,7 +126,7 @@ class CaliMindApp extends ConsumerWidget {
         activeTrackColor: CaliMindColors.primary,
         thumbColor: CaliMindColors.primary,
         inactiveTrackColor: CaliMindColors.cardBorder,
-        overlayColor: Color(0x337C6EED),
+        overlayColor: Color(0x22167D78),
       ),
       dividerTheme: const DividerThemeData(color: CaliMindColors.cardBorder, thickness: 1, space: 1),
       progressIndicatorTheme: const ProgressIndicatorThemeData(color: CaliMindColors.primary),

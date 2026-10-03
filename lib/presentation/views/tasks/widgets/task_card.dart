@@ -1,10 +1,12 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_animate/flutter_animate.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:intl/intl.dart';
 import 'package:lucide_icons_flutter/lucide_icons.dart';
 import 'package:share_plus/share_plus.dart';
 import 'package:calimind/core/constants/app_colors.dart';
 import 'package:calimind/core/constants/app_typography.dart';
+import 'package:calimind/core/utils/app_feedback.dart';
 import 'package:calimind/core/utils/haptic_feedback_utils.dart';
 import 'package:calimind/domain/models/task.dart';
 import 'package:calimind/presentation/state/task_provider.dart';
@@ -24,7 +26,21 @@ class TaskCard extends ConsumerWidget {
       direction: DismissDirection.endToStart,
       onDismissed: (_) async {
         await HapticFeedbackUtils.heavyImpact();
-        await ref.read(taskProvider.notifier).deleteTask(task.id);
+        final deleted =
+            await ref.read(taskProvider.notifier).deleteTask(task.id);
+        if (context.mounted) {
+          if (deleted) {
+            AppFeedback.success(
+              ScaffoldMessenger.of(context),
+              'Task deleted.',
+            );
+          } else {
+            AppFeedback.error(
+              ScaffoldMessenger.of(context),
+              'Could not delete this task. Please try again.',
+            );
+          }
+        }
       },
       background: Container(
         alignment: Alignment.centerRight,
@@ -33,110 +49,234 @@ class TaskCard extends ConsumerWidget {
           color: CaliMindColors.destructive.withValues(alpha: 0.15),
           borderRadius: BorderRadius.circular(16),
         ),
-        child: const Icon(LucideIcons.trash2, color: CaliMindColors.destructive, size: 22),
+        child: const Icon(LucideIcons.trash2,
+            color: CaliMindColors.destructive, size: 22),
       ),
       child: Container(
         margin: const EdgeInsets.only(bottom: 10),
         decoration: BoxDecoration(
           color: CaliMindColors.card,
           borderRadius: BorderRadius.circular(16),
-          border: Border(
-            left: BorderSide(color: color, width: 3.5),
-            top: const BorderSide(color: CaliMindColors.cardBorder),
-            right: const BorderSide(color: CaliMindColors.cardBorder),
-            bottom: const BorderSide(color: CaliMindColors.cardBorder),
-          ),
+          border: Border.all(color: CaliMindColors.cardBorder),
         ),
-        child: InkWell(
-          borderRadius: BorderRadius.circular(16),
-          onTap: onEdit,
-          child: Padding(
-            padding: const EdgeInsets.all(14),
-            child: Row(
-              children: [
-                // Completion check
-                GestureDetector(
-                  onTap: () async {
-                    await HapticFeedbackUtils.mediumImpact();
-                    await ref.read(taskProvider.notifier).toggleCompletion(task.id, !task.completed);
-                  },
-                  child: AnimatedContainer(
-                    duration: 200.ms,
-                    width: 24,
-                    height: 24,
-                    decoration: BoxDecoration(
-                      shape: BoxShape.circle,
-                      color: task.completed ? color : Colors.transparent,
-                      border: Border.all(
-                        color: task.completed ? color : CaliMindColors.mutedForeground,
-                        width: 1.8,
+        child: Padding(
+          padding: const EdgeInsets.all(14),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Row(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  GestureDetector(
+                    onTap: () async {
+                      await HapticFeedbackUtils.mediumImpact();
+                      final notifier = ref.read(taskProvider.notifier);
+                      final changed = await notifier.toggleCompletion(
+                        task.id,
+                        !task.completed,
+                      );
+                      if (context.mounted) {
+                        if (changed) {
+                          AppFeedback.success(
+                            ScaffoldMessenger.of(context),
+                            task.completed
+                                ? 'Task moved back to Active.'
+                                : 'Task marked complete.',
+                          );
+                        } else {
+                          AppFeedback.error(
+                            ScaffoldMessenger.of(context),
+                            _taskUpdateError(notifier),
+                          );
+                        }
+                      }
+                    },
+                    child: AnimatedContainer(
+                      duration: 200.ms,
+                      width: 26,
+                      height: 26,
+                      decoration: BoxDecoration(
+                        shape: BoxShape.circle,
+                        color: task.completed ? color : Colors.transparent,
+                        border: Border.all(
+                          color: task.completed
+                              ? color
+                              : CaliMindColors.mutedForeground,
+                          width: 1.8,
+                        ),
+                      ),
+                      child: task.completed
+                          ? const Icon(
+                              LucideIcons.check,
+                              color: Colors.white,
+                              size: 15,
+                            )
+                          : null,
+                    ),
+                  ),
+                  const SizedBox(width: 10),
+                  Expanded(
+                    child: InkWell(
+                      onTap: onEdit,
+                      child: Text(
+                        task.title,
+                        style: CaliMindTypography.bodyMedium.copyWith(
+                          fontSize: 16,
+                          fontWeight: FontWeight.w700,
+                          decoration: task.completed
+                              ? TextDecoration.lineThrough
+                              : null,
+                          color: task.completed
+                              ? CaliMindColors.mutedForeground
+                              : CaliMindColors.foreground,
+                        ),
+                        maxLines: 3,
+                        overflow: TextOverflow.ellipsis,
                       ),
                     ),
-                    child: task.completed
-                        ? const Icon(LucideIcons.check, color: Colors.white, size: 14)
-                        : null,
                   ),
+                  const SizedBox(width: 8),
+                  _PriorityBadge(priority: task.priority),
+                ],
+              ),
+              const SizedBox(height: 10),
+              Wrap(
+                spacing: 10,
+                runSpacing: 6,
+                crossAxisAlignment: WrapCrossAlignment.center,
+                children: [
+                  _CategoryBadge(category: task.category),
+                  _TaskMeta(
+                    icon: LucideIcons.clock,
+                    value: _formatDuration(task.duration),
+                  ),
+                  if (task.specificTime != null)
+                    _TaskMeta(
+                      icon: LucideIcons.alarmClock,
+                      value: task.specificTime!,
+                    ),
+                ],
+              ),
+              if (task.deadline != null || task.reminderAt != null) ...[
+                const SizedBox(height: 8),
+                Wrap(
+                  spacing: 10,
+                  runSpacing: 5,
+                  children: [
+                    if (task.deadline != null)
+                      _TaskDateLabel(
+                        icon: LucideIcons.calendarClock,
+                        value:
+                            'Due ${DateFormat('MMM d, h:mm a').format(task.deadline!.toLocal())}',
+                      ),
+                    if (task.reminderAt != null)
+                      _TaskDateLabel(
+                        icon: LucideIcons.bell,
+                        value:
+                            'Reminder ${DateFormat('MMM d, h:mm a').format(task.reminderAt!.toLocal())}',
+                      ),
+                  ],
                 ),
-                const SizedBox(width: 12),
-                // Content
-                Expanded(
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Row(
-                        children: [
-                          Expanded(
-                            child: Text(
-                              task.title,
-                              style: CaliMindTypography.bodyMedium.copyWith(
-                                fontWeight: FontWeight.w600,
-                                decoration: task.completed ? TextDecoration.lineThrough : null,
-                                color: task.completed ? CaliMindColors.mutedForeground : CaliMindColors.foreground,
-                              ),
-                              maxLines: 1,
-                              overflow: TextOverflow.ellipsis,
-                            ),
-                          ),
-                          const SizedBox(width: 8),
-                          _PriorityBadge(priority: task.priority),
-                        ],
-                      ),
-                      const SizedBox(height: 6),
-                      Row(
-                        children: [
-                          _CategoryBadge(category: task.category),
-                          const SizedBox(width: 8),
-                          const Icon(LucideIcons.clock, size: 11, color: CaliMindColors.mutedForeground),
-                          const SizedBox(width: 4),
-                          Text(
-                            _formatDuration(task.duration),
-                            style: CaliMindTypography.bodySmall.copyWith(fontSize: 11),
-                          ),
-                          if (task.specificTime != null) ...[
-                            const SizedBox(width: 8),
-                            const Icon(LucideIcons.alarmClock, size: 11, color: CaliMindColors.mutedForeground),
-                            const SizedBox(width: 4),
-                            Text(task.specificTime!, style: CaliMindTypography.timeMonospace.copyWith(fontSize: 11)),
-                          ],
-                          const Spacer(),
-                          // Share button for Class Rep
-                          if (task.category == TaskCategory.classRep)
-                            GestureDetector(
-                              onTap: () => _shareAnnouncement(context),
-                              child: const Icon(LucideIcons.share2, size: 15, color: CaliMindColors.catClass),
-                            ),
-                        ],
-                      ),
-                    ],
+              ],
+              const SizedBox(height: 12),
+              Row(
+                children: [
+                  Expanded(
+                    child: _actionButton(
+                      label: task.completed ? 'Reopen' : 'Complete',
+                      icon: task.completed
+                          ? LucideIcons.rotateCcw
+                          : LucideIcons.circleCheck,
+                      color: CaliMindColors.success,
+                      onPressed: () async {
+                        final notifier = ref.read(taskProvider.notifier);
+                        final changed = await notifier.toggleCompletion(
+                          task.id,
+                          !task.completed,
+                        );
+                        if (!context.mounted) return;
+                        if (changed) {
+                          AppFeedback.success(
+                            ScaffoldMessenger.of(context),
+                            task.completed
+                                ? 'Task moved back to Active.'
+                                : 'Task marked complete.',
+                          );
+                        } else {
+                          AppFeedback.error(
+                            ScaffoldMessenger.of(context),
+                            _taskUpdateError(notifier),
+                          );
+                        }
+                      },
+                    ),
+                  ),
+                  const SizedBox(width: 4),
+                  Expanded(
+                    child: _actionButton(
+                      label: 'Edit',
+                      icon: LucideIcons.pencil,
+                      color: CaliMindColors.primary,
+                      onPressed: onEdit,
+                    ),
+                  ),
+                  const SizedBox(width: 4),
+                  Expanded(
+                    child: _actionButton(
+                      label: 'Delete',
+                      icon: LucideIcons.trash2,
+                      color: CaliMindColors.destructive,
+                      onPressed: () => _confirmDelete(context, ref),
+                    ),
+                  ),
+                ],
+              ),
+              if (task.category == TaskCategory.classRep) ...[
+                const SizedBox(height: 6),
+                Align(
+                  alignment: Alignment.centerRight,
+                  child: TextButton.icon(
+                    onPressed: () => _shareAnnouncement(context),
+                    icon: const Icon(LucideIcons.share2, size: 15),
+                    label: const Text('Share'),
+                    style: TextButton.styleFrom(
+                      foregroundColor: CaliMindColors.mutedForeground,
+                    ),
                   ),
                 ),
               ],
-            ),
+            ],
           ),
         ),
       ),
     ).animate().fadeIn(duration: 350.ms).slideX(begin: 0.05);
   }
+
+  Widget _actionButton({
+    required String label,
+    required IconData icon,
+    required Color color,
+    required VoidCallback? onPressed,
+  }) =>
+      TextButton.icon(
+        onPressed: onPressed,
+        icon: Icon(icon, size: 15),
+        label: Text(label, maxLines: 1, overflow: TextOverflow.ellipsis),
+        style: TextButton.styleFrom(
+          foregroundColor: color,
+          minimumSize: const Size(0, 42),
+          padding: const EdgeInsets.symmetric(horizontal: 4),
+          textStyle: CaliMindTypography.bodySmall.copyWith(
+            fontSize: 11,
+            fontWeight: FontWeight.w700,
+          ),
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(11),
+            side: BorderSide(color: color.withValues(alpha: 0.22)),
+          ),
+          backgroundColor: color.withValues(alpha: 0.06),
+        ),
+      );
 
   String _formatDuration(int minutes) {
     if (minutes < 60) return '${minutes}m';
@@ -145,10 +285,77 @@ class TaskCard extends ConsumerWidget {
     return m == 0 ? '${h}h' : '${h}h ${m}m';
   }
 
+  String _taskUpdateError(TaskNotifier notifier) {
+    final error = notifier.lastOperationError;
+    return error == null || error.isEmpty
+        ? 'Could not update this task. Please try again.'
+        : 'Could not update task: $error';
+  }
+
   Future<void> _shareAnnouncement(BuildContext context) async {
-    final text = '📢 [Class Rep Announcement]\n\n${task.title}\n${task.description ?? ''}\n\nShared via CaliMind';
+    final text =
+        '📢 [Class Rep Announcement]\n\n${task.title}\n${task.description ?? ''}\n\nShared via CaliMind';
     await Share.share(text, subject: task.title);
   }
+
+  Future<void> _confirmDelete(BuildContext context, WidgetRef ref) async {
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text('Delete task?'),
+        content: Text('“${task.title}” will be removed from your task list.'),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context, false),
+            child: const Text('Cancel'),
+          ),
+          FilledButton(
+            onPressed: () => Navigator.pop(context, true),
+            child: const Text('Delete'),
+          ),
+        ],
+      ),
+    );
+    if (confirmed == true) {
+      final deleted = await ref.read(taskProvider.notifier).deleteTask(task.id);
+      if (context.mounted) {
+        if (deleted) {
+          AppFeedback.success(
+            ScaffoldMessenger.of(context),
+            'Task deleted.',
+          );
+        } else {
+          AppFeedback.error(
+            ScaffoldMessenger.of(context),
+            'Could not delete this task. Please try again.',
+          );
+        }
+      }
+    }
+  }
+}
+
+class _TaskMeta extends StatelessWidget {
+  final IconData icon;
+  final String value;
+
+  const _TaskMeta({required this.icon, required this.value});
+
+  @override
+  Widget build(BuildContext context) => Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Icon(icon, size: 12, color: CaliMindColors.mutedForeground),
+          const SizedBox(width: 4),
+          Text(
+            value,
+            style: CaliMindTypography.bodySmall.copyWith(
+              color: CaliMindColors.foreground,
+              fontSize: 11,
+            ),
+          ),
+        ],
+      );
 }
 
 class _PriorityBadge extends StatelessWidget {
@@ -158,9 +365,9 @@ class _PriorityBadge extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final (label, color) = switch (priority) {
-      1 => ('P1', CaliMindColors.destructive),
-      2 => ('P2', CaliMindColors.warning),
-      _ => ('P3', CaliMindColors.mutedForeground),
+      1 => ('P1 · High', CaliMindColors.destructive),
+      2 => ('P2 · Medium', CaliMindColors.warning),
+      _ => ('P3 · Low', CaliMindColors.mutedForeground),
     };
 
     return Container(
@@ -178,6 +385,25 @@ class _PriorityBadge extends StatelessWidget {
           color: color,
         ),
       ),
+    );
+  }
+}
+
+class _TaskDateLabel extends StatelessWidget {
+  final IconData icon;
+  final String value;
+
+  const _TaskDateLabel({required this.icon, required this.value});
+
+  @override
+  Widget build(BuildContext context) {
+    return Row(
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        Icon(icon, size: 11, color: CaliMindColors.mutedForeground),
+        const SizedBox(width: 4),
+        Text(value, style: CaliMindTypography.bodySmall.copyWith(fontSize: 10)),
+      ],
     );
   }
 }

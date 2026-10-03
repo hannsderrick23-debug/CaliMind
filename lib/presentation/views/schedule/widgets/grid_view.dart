@@ -9,8 +9,9 @@ import 'package:calimind/domain/models/schedule_slot.dart';
 
 class ScheduleGridView extends StatelessWidget {
   final List<ScheduleSlot> slots;
+  final ValueChanged<ScheduleSlot>? onSlotTap;
 
-  const ScheduleGridView({super.key, required this.slots});
+  const ScheduleGridView({super.key, required this.slots, this.onSlotTap});
 
   @override
   Widget build(BuildContext context) {
@@ -42,6 +43,7 @@ class ScheduleGridView extends StatelessWidget {
           endLabel: DateTimeUtils.formatMinutes(end),
           slots: quadrantSlots,
           index: index,
+          onSlotTap: onSlotTap,
         );
       }).toList(),
     );
@@ -55,6 +57,7 @@ class _QuadrantCard extends StatelessWidget {
   final String endLabel;
   final List<ScheduleSlot> slots;
   final int index;
+  final ValueChanged<ScheduleSlot>? onSlotTap;
 
   const _QuadrantCard({
     required this.label,
@@ -63,6 +66,7 @@ class _QuadrantCard extends StatelessWidget {
     required this.endLabel,
     required this.slots,
     required this.index,
+    required this.onSlotTap,
   });
 
   @override
@@ -98,13 +102,25 @@ class _QuadrantCard extends StatelessWidget {
             Expanded(
               child: slots.isEmpty
                   ? Center(
-                      child: Text('Free', style: CaliMindTypography.bodySmall.copyWith(
-                        fontStyle: FontStyle.italic,
-                        color: CaliMindColors.primary.withValues(alpha: 0.4),
-                      )),
+                      child: Text(
+                        'Free',
+                        style: CaliMindTypography.bodySmall.copyWith(
+                          fontStyle: FontStyle.italic,
+                          color: CaliMindColors.primary.withValues(alpha: 0.4),
+                        ),
+                      ),
                     )
                   : ListView(
-                      children: slots.map((s) => _SlotPill(slot: s)).toList(),
+                      children: slots
+                          .map(
+                            (slot) => _SlotPill(
+                              slot: slot,
+                              onTap: onSlotTap == null
+                                  ? null
+                                  : () => onSlotTap!(slot),
+                            ),
+                          )
+                          .toList(),
                     ),
             ),
           ],
@@ -118,37 +134,52 @@ class _QuadrantCard extends StatelessWidget {
 
 class _SlotPill extends StatelessWidget {
   final ScheduleSlot slot;
+  final VoidCallback? onTap;
 
-  const _SlotPill({required this.slot});
+  const _SlotPill({required this.slot, required this.onTap});
 
   @override
   Widget build(BuildContext context) {
     final color = slot.category.color;
-    return Container(
-      margin: const EdgeInsets.only(bottom: 6),
-      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 5),
-      decoration: BoxDecoration(
-        color: color.withValues(alpha: 0.12),
-        borderRadius: BorderRadius.circular(8),
-        border: Border.all(color: color.withValues(alpha: 0.3)),
-      ),
-      child: Row(
-        children: [
-          Text(
-            slot.startTime,
-            style: CaliMindTypography.timeMonospace.copyWith(fontSize: 9, color: color),
-          ),
-          const SizedBox(width: 5),
-          Expanded(
-            child: Text(
-              slot.taskTitle,
-              style: CaliMindTypography.bodySmall.copyWith(
-                  fontSize: 10, fontWeight: FontWeight.w500),
-              maxLines: 1,
-              overflow: TextOverflow.ellipsis,
+    return GestureDetector(
+      behavior: HitTestBehavior.opaque,
+      onTap: onTap,
+      child: Container(
+        margin: const EdgeInsets.only(bottom: 6),
+        padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 7),
+        decoration: BoxDecoration(
+          color: color.withValues(alpha: 0.12),
+          borderRadius: BorderRadius.circular(8),
+          border: Border.all(color: color.withValues(alpha: 0.3)),
+        ),
+        child: Row(
+          children: [
+            Text(
+              slot.startTime,
+              style: CaliMindTypography.timeMonospace
+                  .copyWith(fontSize: 10, color: color),
             ),
-          ),
-        ],
+            const SizedBox(width: 5),
+            Expanded(
+              child: Text(
+                slot.taskTitle,
+                style: CaliMindTypography.bodySmall.copyWith(
+                  fontSize: 11,
+                  fontWeight: FontWeight.w700,
+                  color: CaliMindColors.foreground,
+                ),
+                maxLines: 2,
+                overflow: TextOverflow.ellipsis,
+              ),
+            ),
+            if (onTap != null)
+              const Icon(
+                LucideIcons.moreVertical,
+                size: 15,
+                color: CaliMindColors.mutedForeground,
+              ),
+          ],
+        ),
       ),
     );
   }

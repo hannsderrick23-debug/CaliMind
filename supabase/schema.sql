@@ -10,9 +10,10 @@ CREATE TABLE IF NOT EXISTS public.tasks (
   title            text NOT NULL CHECK (char_length(btrim(title)) BETWEEN 1 AND 200),
   description      text NULL CHECK (description IS NULL OR char_length(description) <= 1000),
   category         text NOT NULL DEFAULT 'Personal'
-                        CHECK (category IN ('Class Rep', 'Club President', 'Study', 'Personal')),
+                        CHECK (category IN ('Class Rep', 'Club President', 'Study', 'Work', 'Health & Fitness', 'Errands', 'Family', 'Finance', 'Social', 'Personal')),
   duration         int NOT NULL DEFAULT 30 CHECK (duration BETWEEN 5 AND 480),
   deadline         timestamptz NULL,
+  reminder_at      timestamptz NULL,
   preferred_time   text NULL CHECK (preferred_time IN ('Morning', 'Afternoon', 'Evening', 'Night')),
   specific_time    text NULL CHECK (specific_time IS NULL OR specific_time ~ '^([01][0-9]|2[0-3]):[0-5][0-9]$'),
   priority         smallint NOT NULL DEFAULT 2 CHECK (priority IN (1, 2, 3)),
@@ -42,8 +43,20 @@ CREATE TRIGGER tasks_timestamps
   FOR EACH ROW EXECUTE FUNCTION public.handle_task_timestamps();
 
 ALTER TABLE public.tasks ENABLE ROW LEVEL SECURITY;
-CREATE POLICY "tasks_user_only" ON public.tasks
-  FOR ALL USING (auth.uid() = user_id) WITH CHECK (auth.uid() = user_id);
+CREATE POLICY "tasks_select_own" ON public.tasks
+  FOR SELECT TO authenticated
+  USING (auth.uid() = user_id);
+CREATE POLICY "tasks_insert_own" ON public.tasks
+  FOR INSERT TO authenticated
+  WITH CHECK (auth.uid() = user_id);
+CREATE POLICY "tasks_update_own" ON public.tasks
+  FOR UPDATE TO authenticated
+  USING (auth.uid() = user_id)
+  WITH CHECK (auth.uid() = user_id);
+CREATE POLICY "tasks_delete_own" ON public.tasks
+  FOR DELETE TO authenticated
+  USING (auth.uid() = user_id);
+GRANT SELECT, INSERT, UPDATE, DELETE ON public.tasks TO authenticated;
 
 -- ============================================================
 -- SCHEDULE_BLOCKS TABLE

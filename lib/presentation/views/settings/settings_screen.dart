@@ -1,10 +1,12 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_animate/flutter_animate.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:go_router/go_router.dart';
 import 'package:lucide_icons_flutter/lucide_icons.dart';
 import 'package:calimind/core/constants/app_colors.dart';
 import 'package:calimind/core/constants/app_typography.dart';
-import 'package:calimind/core/network/supabase_client.dart';
+import 'package:calimind/core/services/biometric_service.dart';
+import 'package:calimind/core/utils/app_feedback.dart';
 import 'package:calimind/data/datasources/audit_remote_datasource.dart';
 import 'package:calimind/domain/models/audit_log.dart';
 import 'package:calimind/presentation/state/auth_provider.dart';
@@ -21,20 +23,127 @@ class SettingsScreen extends ConsumerStatefulWidget {
 class _SettingsScreenState extends ConsumerState<SettingsScreen> {
   final _auditDatasource = AuditRemoteDatasourceImpl();
   List<AuditLog>? _auditLogs;
-  String? _groqApiKey;
-  bool _isTestingGroq = false;
+  bool _isTestingVoiceService = false;
+  bool _biometricEnabled = false;
+  bool _isChangingBiometric = false;
+  final _biometrics = BiometricService();
 
   @override
   void initState() {
     super.initState();
-    _loadGroqKey();
+    _loadBiometricSetting();
   }
 
-  Future<void> _loadGroqKey() async {
-    final groq = ref.read(groqServiceProvider);
-    final key = await groq.getApiKey();
-    if (mounted) {
-      setState(() => _groqApiKey = key);
+  Future<void> _loadBiometricSetting() async {
+    final enabled = await _biometrics.isEnabled() &&
+        await _biometrics.isBiometricsAvailable();
+    if (mounted) setState(() => _biometricEnabled = enabled);
+  }
+
+  Future<void> _setBiometricEnabled(bool enabled) async {
+    setState(() => _isChangingBiometric = true);
+    try {
+      if (!enabled) {
+        await _biometrics.clearLoginCredentials();
+      } else {
+        if (!await _biometrics.isBiometricsAvailable()) {
+          _showFeedback(
+            'Set up Face ID or a fingerprint on this device first.',
+            isError: true,
+          );
+          return;
+        }
+
+        final email = ref.read(authProvider).user?.email;
+        if (email == null || email.isEmpty) {
+          _showFeedback('Sign in with an email and password to set this up.',
+              isError: true);
+          return;
+        }
+        final password = await _requestPassword();
+        if (password == null || !mounted) return;
+
+        final passwordVerified = await ref
+            .read(authProvider.notifier)
+            .verifyPasswordForBiometricSetup(email, password);
+        if (!passwordVerified) {
+          _showFeedback('That password could not be verified. Try again.',
+              isError: true);
+          return;
+        }
+
+        final verified = await _biometrics.authenticate(
+          localizedReason:
+              'Confirm your identity to enable fingerprint sign-in',
+        );
+        if (!verified) {
+          _showFeedback('Biometric verification was not completed.',
+              isError: true);
+          return;
+        }
+        await _biometrics.saveLoginCredentials(email, password);
+      }
+
+      if (mounted) {
+        setState(() => _biometricEnabled = enabled);
+        _showFeedback(
+          enabled
+              ? 'Fingerprint sign-in is enabled on this device.'
+              : 'Fingerprint sign-in is disabled and saved credentials were removed.',
+        );
+      }
+    } catch (error) {
+      debugPrint('Could not update biometric sign-in: $error');
+      if (mounted) {
+        _showFeedback('Could not update biometric sign-in. Please try again.',
+            isError: true);
+      }
+    } finally {
+      if (mounted) setState(() => _isChangingBiometric = false);
+    }
+  }
+
+  Future<String?> _requestPassword() async {
+    final controller = TextEditingController();
+    try {
+      return await showDialog<String>(
+        context: context,
+        builder: (dialogContext) => AlertDialog(
+          title: const Text('Confirm your password'),
+          content: TextField(
+            controller: controller,
+            autofocus: true,
+            obscureText: true,
+            textInputAction: TextInputAction.done,
+            onSubmitted: (value) => Navigator.pop(dialogContext, value),
+            decoration: const InputDecoration(
+              labelText: 'Account password',
+              prefixIcon: Icon(LucideIcons.lockKeyhole),
+            ),
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.pop(dialogContext),
+              child: const Text('Cancel'),
+            ),
+            FilledButton(
+              onPressed: () => Navigator.pop(dialogContext, controller.text),
+              child: const Text('Continue'),
+            ),
+          ],
+        ),
+      );
+    } finally {
+      controller.dispose();
+    }
+  }
+
+  void _showFeedback(String message, {bool isError = false}) {
+    final messenger = ScaffoldMessenger.of(context);
+    if (isError) {
+      AppFeedback.error(messenger, message);
+    } else {
+      AppFeedback.success(messenger, message);
     }
   }
 
@@ -45,174 +154,21 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
     }
   }
 
-  Future<void> _configureGroqKey() async {
-    final controller = TextEditingController(text: _groqApiKey ?? '');
-    var obscure = true;
+  Future<void> _testVoiceAssistant() async {
+    setState(() => _isTestingVoiceService = true);
+    final voiceService = ref.read(aventorVoiceServiceProvider);
 
-    await showModalBottomSheet(
-      context: context,
-      isScrollControlled: true,
-      backgroundColor: CaliMindColors.card,
-      shape: const RoundedRectangleBorder(
-        borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
-      ),
-      builder: (ctx) => StatefulBuilder(
-        builder: (context, setModalState) => Padding(
-          padding: EdgeInsets.only(
-            left: 20,
-            right: 20,
-            top: 20,
-            bottom: MediaQuery.of(context).viewInsets.bottom + 24,
-          ),
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Center(
-                child: Container(
-                  width: 40,
-                  height: 4,
-                  decoration: BoxDecoration(
-                    color: CaliMindColors.cardBorder,
-                    borderRadius: BorderRadius.circular(2),
-                  ),
-                ),
-              ),
-              const SizedBox(height: 16),
-              Row(
-                children: [
-                  Container(
-                    padding: const EdgeInsets.all(8),
-                    decoration: BoxDecoration(
-                      color: CaliMindColors.primary.withValues(alpha: 0.15),
-                      borderRadius: BorderRadius.circular(10),
-                    ),
-                    child: const Icon(LucideIcons.bot,
-                        size: 20, color: CaliMindColors.primary),
-                  ),
-                  const SizedBox(width: 12),
-                  Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Text('Groq AI API Key', style: CaliMindTypography.h3),
-                      Text(
-                        'Powers Whisper Large v3 STT & LLaMA 3.3',
-                        style: CaliMindTypography.bodySmall,
-                      ),
-                    ],
-                  ),
-                ],
-              ),
-              const SizedBox(height: 20),
-              TextField(
-                controller: controller,
-                obscureText: obscure,
-                style: CaliMindTypography.bodyMedium,
-                decoration: InputDecoration(
-                  hintText: 'gsk_...',
-                  hintStyle: CaliMindTypography.bodyMedium.copyWith(
-                    color: CaliMindColors.mutedForeground,
-                  ),
-                  filled: true,
-                  fillColor: CaliMindColors.background,
-                  suffixIcon: IconButton(
-                    icon: Icon(
-                      obscure ? LucideIcons.eye : LucideIcons.eyeOff,
-                      size: 18,
-                      color: CaliMindColors.mutedForeground,
-                    ),
-                    onPressed: () {
-                      setModalState(() => obscure = !obscure);
-                    },
-                  ),
-                  border: OutlineInputBorder(
-                    borderRadius: BorderRadius.circular(12),
-                    borderSide: const BorderSide(color: CaliMindColors.cardBorder),
-                  ),
-                  enabledBorder: OutlineInputBorder(
-                    borderRadius: BorderRadius.circular(12),
-                    borderSide: const BorderSide(color: CaliMindColors.cardBorder),
-                  ),
-                  focusedBorder: OutlineInputBorder(
-                    borderRadius: BorderRadius.circular(12),
-                    borderSide: const BorderSide(color: CaliMindColors.primary),
-                  ),
-                ),
-              ),
-              const SizedBox(height: 20),
-              Row(
-                children: [
-                  if (_groqApiKey != null)
-                    Expanded(
-                      child: OutlinedButton(
-                        style: OutlinedButton.styleFrom(
-                          foregroundColor: CaliMindColors.destructive,
-                          side: const BorderSide(
-                              color: CaliMindColors.destructive),
-                          padding: const EdgeInsets.symmetric(vertical: 14),
-                          shape: RoundedRectangleBorder(
-                            borderRadius: BorderRadius.circular(12),
-                          ),
-                        ),
-                        onPressed: () async {
-                          final groq = ref.read(groqServiceProvider);
-                          await groq.clearApiKey();
-                          await _loadGroqKey();
-                          if (ctx.mounted) Navigator.pop(ctx);
-                        },
-                        child: const Text('Clear Key'),
-                      ),
-                    ),
-                  if (_groqApiKey != null) const SizedBox(width: 12),
-                  Expanded(
-                    child: ElevatedButton(
-                      style: ElevatedButton.styleFrom(
-                        backgroundColor: CaliMindColors.primary,
-                        foregroundColor: Colors.white,
-                        padding: const EdgeInsets.symmetric(vertical: 14),
-                        shape: RoundedRectangleBorder(
-                          borderRadius: BorderRadius.circular(12),
-                        ),
-                      ),
-                      onPressed: () async {
-                        final key = controller.text.trim();
-                        final groq = ref.read(groqServiceProvider);
-                        if (key.isNotEmpty) {
-                          await groq.saveApiKey(key);
-                        } else {
-                          await groq.clearApiKey();
-                        }
-                        await _loadGroqKey();
-                        if (ctx.mounted) Navigator.pop(ctx);
-                      },
-                      child: const Text('Save Encrypted'),
-                    ),
-                  ),
-                ],
-              ),
-            ],
-          ),
-        ),
-      ),
-    );
-  }
-
-  Future<void> _testGroqConnection() async {
-    setState(() => _isTestingGroq = true);
-    final groq = ref.read(groqServiceProvider);
-
-    final res = await groq.parseVoiceCommandWithAI(
+    final result = await voiceService.parseVoiceCommandWithAI(
       'schedule a 30 minute study calculus session tomorrow morning',
     );
 
     if (mounted) {
-      setState(() => _isTestingGroq = false);
-      final success = res != null;
+      setState(() => _isTestingVoiceService = false);
+      final success = result != null;
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
-          backgroundColor: success
-              ? const Color(0xFF10B981)
-              : CaliMindColors.destructive,
+          backgroundColor:
+              success ? CaliMindColors.success : CaliMindColors.destructive,
           content: Row(
             children: [
               Icon(
@@ -224,8 +180,8 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
               Expanded(
                 child: Text(
                   success
-                      ? 'Groq API Connected! LLaMA 3.3 returned valid schedule parse.'
-                      : 'Connection failed. Please check your Groq API key.',
+                      ? 'Aventor Voice is ready.'
+                      : 'Aventor Voice could not complete the test. Please try again.',
                   style: CaliMindTypography.bodySmall
                       .copyWith(color: Colors.white),
                 ),
@@ -240,7 +196,12 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
   @override
   Widget build(BuildContext context) {
     final profileAsync = ref.watch(profileProvider);
-    final hasGroq = _groqApiKey != null && _groqApiKey!.isNotEmpty;
+    final auth = ref.watch(authProvider);
+    final profileName = auth.user?.userMetadata?['full_name'] as String? ??
+        auth.user?.userMetadata?['name'] as String?;
+    final profileSubtitle = profileName?.trim().isNotEmpty == true
+        ? profileName!.trim()
+        : auth.user?.email ?? 'Manage your account details';
 
     return Scaffold(
       backgroundColor: CaliMindColors.background,
@@ -258,9 +219,25 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
       body: ListView(
         padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 16),
         children: [
-          // Voice AI & Groq Engine
+          _SettingsCard(
+            children: [
+              _SettingsTile(
+                icon: LucideIcons.userRound,
+                title: 'Profile',
+                subtitle: profileSubtitle,
+                trailing: const Icon(
+                  LucideIcons.chevronRight,
+                  size: 16,
+                  color: CaliMindColors.mutedForeground,
+                ),
+                onTap: () => context.push('/profile'),
+              ),
+            ],
+          ),
+          const SizedBox(height: 24),
+          // Voice assistant
           const _SectionHeader(
-            title: 'AI Voice Model (Groq Cloud)',
+            title: 'Aventor Voice',
             icon: LucideIcons.sparkles,
             color: CaliMindColors.primary,
           ),
@@ -274,7 +251,7 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
                     Container(
                       padding: const EdgeInsets.all(10),
                       decoration: BoxDecoration(
-                        gradient: CaliMindColors.mindGradient,
+                        color: CaliMindColors.primary,
                         borderRadius: BorderRadius.circular(12),
                       ),
                       child: const Icon(LucideIcons.mic,
@@ -287,39 +264,14 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
                         children: [
                           Row(
                             children: [
-                              Text('Groq AI Acceleration',
+                              Text('Aventor Voice',
                                   style: CaliMindTypography.bodyMedium
                                       .copyWith(fontWeight: FontWeight.w600)),
-                              const SizedBox(width: 8),
-                              Container(
-                                padding: const EdgeInsets.symmetric(
-                                    horizontal: 6, vertical: 2),
-                                decoration: BoxDecoration(
-                                  color: hasGroq
-                                      ? const Color(0xFF10B981)
-                                          .withValues(alpha: 0.15)
-                                      : CaliMindColors.mutedForeground
-                                          .withValues(alpha: 0.15),
-                                  borderRadius: BorderRadius.circular(6),
-                                ),
-                                child: Text(
-                                  hasGroq ? 'Active' : 'Unconfigured',
-                                  style: CaliMindTypography.bodySmall.copyWith(
-                                    fontSize: 10,
-                                    fontWeight: FontWeight.w700,
-                                    color: hasGroq
-                                        ? const Color(0xFF10B981)
-                                        : CaliMindColors.mutedForeground,
-                                  ),
-                                ),
-                              ),
                             ],
                           ),
                           const SizedBox(height: 2),
                           Text(
-                            hasGroq
-                                ? 'Whisper-Large-v3 & LLaMA-3.3 active'
-                                : 'Using local speech fallback',
+                            'Your spoken requests are securely processed into task details.',
                             style: CaliMindTypography.bodySmall,
                           ),
                         ],
@@ -330,44 +282,37 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
               ),
               _Divider(),
               _SettingsTile(
-                icon: LucideIcons.keyRound,
-                title: 'Groq API Key',
-                subtitle: hasGroq
-                    ? '••••••••${_groqApiKey!.substring(_groqApiKey!.length - 4)}'
-                    : 'Set your free Groq API key for cloud AI',
-                trailing: const Icon(LucideIcons.chevronRight,
-                    size: 16, color: CaliMindColors.mutedForeground),
-                onTap: _configureGroqKey,
+                icon: LucideIcons.zap,
+                title: 'Test Aventor Voice',
+                subtitle: _isTestingVoiceService
+                    ? 'Testing connection...'
+                    : 'Check voice understanding and task structuring',
+                trailing: _isTestingVoiceService
+                    ? const SizedBox(
+                        width: 16,
+                        height: 16,
+                        child: CircularProgressIndicator(
+                          strokeWidth: 2,
+                          color: CaliMindColors.primary,
+                        ),
+                      )
+                    : const Icon(
+                        LucideIcons.playCircle,
+                        size: 18,
+                        color: CaliMindColors.primary,
+                      ),
+                onTap:
+                    _isTestingVoiceService ? null : _testVoiceAssistant,
               ),
-              if (hasGroq) ...[
-                _Divider(),
-                _SettingsTile(
-                  icon: LucideIcons.zap,
-                  title: 'Test AI Model Latency',
-                  subtitle: _isTestingGroq
-                      ? 'Testing connection...'
-                      : 'Send test prompt to LLaMA 3.3',
-                  trailing: _isTestingGroq
-                      ? const SizedBox(
-                          width: 16,
-                          height: 16,
-                          child: CircularProgressIndicator(
-                              strokeWidth: 2, color: CaliMindColors.primary),
-                        )
-                      : const Icon(LucideIcons.playCircle,
-                          size: 18, color: CaliMindColors.primary),
-                  onTap: _isTestingGroq ? null : _testGroqConnection,
-                ),
-              ],
             ],
           ),
 
           const SizedBox(height: 24),
           // Backend & Database (Supabase)
           const _SectionHeader(
-            title: 'Database & Auth (Supabase)',
+            title: 'Security',
             icon: LucideIcons.database,
-            color: Color(0xFF10B981),
+            color: CaliMindColors.success,
           ),
           const SizedBox(height: 10),
           _SettingsCard(
@@ -379,11 +324,11 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
                     Container(
                       padding: const EdgeInsets.all(10),
                       decoration: BoxDecoration(
-                        color: const Color(0xFF10B981).withValues(alpha: 0.15),
+                        color: CaliMindColors.success.withValues(alpha: 0.15),
                         borderRadius: BorderRadius.circular(12),
                       ),
                       child: const Icon(LucideIcons.server,
-                          color: Color(0xFF10B981), size: 20),
+                          color: CaliMindColors.success, size: 20),
                     ),
                     const SizedBox(width: 14),
                     Expanded(
@@ -392,7 +337,7 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
                         children: [
                           Row(
                             children: [
-                              Text('PostgreSQL Cloud Sync',
+                              Text('Account protection',
                                   style: CaliMindTypography.bodyMedium
                                       .copyWith(fontWeight: FontWeight.w600)),
                               const SizedBox(width: 8),
@@ -400,16 +345,16 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
                                 padding: const EdgeInsets.symmetric(
                                     horizontal: 6, vertical: 2),
                                 decoration: BoxDecoration(
-                                  color: const Color(0xFF10B981)
+                                  color: CaliMindColors.success
                                       .withValues(alpha: 0.15),
                                   borderRadius: BorderRadius.circular(6),
                                 ),
                                 child: Text(
-                                  'RLS Active',
+                                  'Protected',
                                   style: CaliMindTypography.bodySmall.copyWith(
                                     fontSize: 10,
                                     fontWeight: FontWeight.w700,
-                                    color: const Color(0xFF10B981),
+                                    color: CaliMindColors.success,
                                   ),
                                 ),
                               ),
@@ -417,11 +362,8 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
                           ),
                           const SizedBox(height: 2),
                           Text(
-                            SupabaseConfig.url,
-                            style: CaliMindTypography.timeMonospace
-                                .copyWith(fontSize: 11),
-                            maxLines: 1,
-                            overflow: TextOverflow.ellipsis,
+                            'Your tasks are protected by sign-in and row-level security.',
+                            style: CaliMindTypography.bodySmall,
                           ),
                         ],
                       ),
@@ -434,8 +376,11 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
                 icon: LucideIcons.shieldCheck,
                 title: 'Row Level Security',
                 subtitle: 'All user tasks are cryptographically isolated',
-                trailing: Icon(LucideIcons.check,
-                    size: 16, color: Color(0xFF10B981)),
+                trailing: Icon(
+                  LucideIcons.check,
+                  size: 16,
+                  color: CaliMindColors.success,
+                ),
               ),
             ],
           ),
@@ -453,12 +398,23 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
               _SettingsTile(
                 icon: LucideIcons.fingerprint,
                 title: 'Biometric Unlock',
-                subtitle: 'Face ID or Fingerprint',
-                trailing: Switch(
-                  value: true,
-                  onChanged: (_) {},
-                  activeThumbColor: CaliMindColors.primary,
-                ),
+                subtitle: _biometricEnabled
+                    ? 'Sign in with Face ID or fingerprint on this device'
+                    : 'Save your password securely for biometric sign-in',
+                trailing: _isChangingBiometric
+                    ? const SizedBox(
+                        width: 22,
+                        height: 22,
+                        child: CircularProgressIndicator(
+                          strokeWidth: 2,
+                          color: CaliMindColors.primary,
+                        ),
+                      )
+                    : Switch(
+                        value: _biometricEnabled,
+                        onChanged: _setBiometricEnabled,
+                        activeThumbColor: CaliMindColors.primary,
+                      ),
               ),
               _Divider(),
               _SettingsTile(
@@ -562,6 +518,8 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
           GestureDetector(
             onTap: () async {
               await ref.read(authProvider.notifier).signOut();
+              if (!context.mounted) return;
+              context.go('/login');
             },
             child: Container(
               width: double.infinity,
@@ -737,8 +695,8 @@ class _AuditLogSheet extends StatelessWidget {
                   padding:
                       const EdgeInsets.symmetric(horizontal: 20, vertical: 8),
                   itemCount: logs.length,
-                  separatorBuilder: (_, __) =>
-                      const Divider(color: CaliMindColors.cardBorder, height: 1),
+                  separatorBuilder: (_, __) => const Divider(
+                      color: CaliMindColors.cardBorder, height: 1),
                   itemBuilder: (ctx, i) {
                     final log = logs[i];
                     return Padding(
@@ -749,8 +707,8 @@ class _AuditLogSheet extends StatelessWidget {
                             padding: const EdgeInsets.symmetric(
                                 horizontal: 8, vertical: 3),
                             decoration: BoxDecoration(
-                              color: CaliMindColors.primary
-                                  .withValues(alpha: 0.1),
+                              color:
+                                  CaliMindColors.primary.withValues(alpha: 0.1),
                               borderRadius: BorderRadius.circular(6),
                             ),
                             child: Text(log.actionType,

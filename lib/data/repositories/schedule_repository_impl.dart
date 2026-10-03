@@ -10,6 +10,9 @@ class ScheduleRepositoryImpl {
   Future<List<ScheduleSlot>> getSlotsForDate(String date) =>
       _datasource.fetchSlotsForDate(date);
 
+  Future<List<ScheduleSlot>> getSlotsBetween(String startDate, String endDate) =>
+      _datasource.fetchSlotsBetween(startDate, endDate);
+
   Future<void> saveSchedule(List<ScheduleSlot> slots, String date) =>
       _datasource.saveSchedule(slots, date);
 

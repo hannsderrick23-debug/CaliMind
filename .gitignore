@@ -19,9 +19,11 @@ android/gradlew.bat
 android/local.properties
 android/**/GeneratedPluginRegistrant.java
 android/**/*.keystore
+android/app/google-services.json
 
 # iOS
 ios/Runner/GeneratedPluginRegistrant.*
+ios/Runner/GoogleService-Info.plist
 ios/Pods/
 ios/.symlinks/
 ios/Flutter/Flutter.framework

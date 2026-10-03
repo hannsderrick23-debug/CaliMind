@@ -7,14 +7,16 @@ import 'package:calimind/domain/models/schedule_slot.dart';
 
 class TimelineView extends StatelessWidget {
   final List<ScheduleSlot> slots;
+  final ValueChanged<ScheduleSlot>? onSlotTap;
 
-  const TimelineView({super.key, required this.slots});
+  const TimelineView({super.key, required this.slots, this.onSlotTap});
 
   @override
   Widget build(BuildContext context) {
     if (slots.isEmpty) {
       return const Center(
-        child: Text('No slots scheduled', style: TextStyle(color: CaliMindColors.mutedForeground)),
+        child: Text('No slots scheduled',
+            style: TextStyle(color: CaliMindColors.mutedForeground)),
       );
     }
 
@@ -24,7 +26,11 @@ class TimelineView extends StatelessWidget {
       itemBuilder: (context, i) {
         if (i.isEven) {
           final slot = slots[i ~/ 2];
-          return _TimelineSlotCard(slot: slot, index: i ~/ 2);
+          return _TimelineSlotCard(
+            slot: slot,
+            index: i ~/ 2,
+            onTap: onSlotTap == null ? null : () => onSlotTap!(slot),
+          );
         } else {
           // 15-minute buffer indicator
           return _BufferCard();
@@ -37,8 +43,13 @@ class TimelineView extends StatelessWidget {
 class _TimelineSlotCard extends StatelessWidget {
   final ScheduleSlot slot;
   final int index;
+  final VoidCallback? onTap;
 
-  const _TimelineSlotCard({required this.slot, required this.index});
+  const _TimelineSlotCard({
+    required this.slot,
+    required this.index,
+    required this.onTap,
+  });
 
   @override
   Widget build(BuildContext context) {
@@ -49,66 +60,117 @@ class _TimelineSlotCard extends StatelessWidget {
       decoration: BoxDecoration(
         color: CaliMindColors.card,
         borderRadius: BorderRadius.circular(14),
-        border: Border(
-          left: BorderSide(color: color, width: 4),
-          top: const BorderSide(color: CaliMindColors.cardBorder),
-          right: const BorderSide(color: CaliMindColors.cardBorder),
-          bottom: const BorderSide(color: CaliMindColors.cardBorder),
-        ),
+        border: Border.all(color: CaliMindColors.cardBorder),
         boxShadow: [
           BoxShadow(
-            color: color.withValues(alpha: 0.06),
-            blurRadius: 12,
+            color: CaliMindColors.foreground.withValues(alpha: 0.05),
+            blurRadius: 10,
             offset: const Offset(0, 2),
           ),
         ],
       ),
-      child: Padding(
-        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
-        child: Row(
-          children: [
-            // Time column
-            Column(
-              crossAxisAlignment: CrossAxisAlignment.end,
+      child: Material(
+        color: Colors.transparent,
+        borderRadius: BorderRadius.circular(14),
+        child: InkWell(
+          onTap: onTap,
+          borderRadius: BorderRadius.circular(14),
+          child: Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+            child: Row(
               children: [
-                Text(slot.startTime, style: CaliMindTypography.timeMonospace.copyWith(fontSize: 13, color: color)),
-                const SizedBox(height: 2),
-                Text(slot.endTime, style: CaliMindTypography.timeMonospace.copyWith(fontSize: 11, color: CaliMindColors.mutedForeground)),
-              ],
-            ),
-            const SizedBox(width: 14),
-            Container(width: 1, height: 32, color: color.withValues(alpha: 0.3)),
-            const SizedBox(width: 14),
-            // Task info
-            Expanded(
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
+                Column(
+                crossAxisAlignment: CrossAxisAlignment.end,
                 children: [
                   Text(
-                    slot.taskTitle,
-                    style: CaliMindTypography.bodyMedium.copyWith(fontWeight: FontWeight.w600),
-                    maxLines: 1,
-                    overflow: TextOverflow.ellipsis,
+                    slot.startTime,
+                    style: CaliMindTypography.timeMonospace.copyWith(
+                      fontSize: 13,
+                      color: CaliMindColors.foreground,
+                    ),
                   ),
-                  const SizedBox(height: 4),
-                  Row(
-                    children: [
-                      Icon(slot.category.icon, size: 11, color: color),
-                      const SizedBox(width: 5),
-                      Text(slot.category.label, style: CaliMindTypography.bodySmall.copyWith(color: color, fontSize: 11)),
-                      const SizedBox(width: 10),
-                      const Icon(LucideIcons.clock, size: 11, color: CaliMindColors.mutedForeground),
-                      const SizedBox(width: 4),
-                      Text('${slot.duration}m', style: CaliMindTypography.bodySmall.copyWith(fontSize: 11)),
-                    ],
+                  const SizedBox(height: 2),
+                  Text(
+                    slot.endTime,
+                    style: CaliMindTypography.timeMonospace.copyWith(
+                      fontSize: 11,
+                      color: CaliMindColors.mutedForeground,
+                    ),
                   ),
                 ],
-              ),
+                ),
+                const SizedBox(width: 14),
+                Container(
+                width: 1,
+                height: 32,
+                color: CaliMindColors.cardBorder,
+                ),
+                const SizedBox(width: 14),
+                Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      slot.taskTitle,
+                      style: CaliMindTypography.bodyMedium.copyWith(
+                        fontWeight: FontWeight.w700,
+                        color: CaliMindColors.foreground,
+                      ),
+                      maxLines: 2,
+                      overflow: TextOverflow.ellipsis,
+                    ),
+                    const SizedBox(height: 4),
+                    Wrap(
+                      spacing: 10,
+                      runSpacing: 4,
+                      crossAxisAlignment: WrapCrossAlignment.center,
+                      children: [
+                        Icon(
+                          slot.category.icon,
+                          size: 11,
+                          color: color,
+                        ),
+                        Text(
+                          slot.category.label,
+                          style: CaliMindTypography.bodySmall.copyWith(
+                            color: color,
+                            fontSize: 11,
+                          ),
+                        ),
+                        const Icon(
+                          LucideIcons.clock,
+                          size: 11,
+                          color: CaliMindColors.mutedForeground,
+                        ),
+                        Text(
+                          '${slot.duration}m',
+                          style: CaliMindTypography.bodySmall.copyWith(
+                            color: CaliMindColors.foreground,
+                            fontSize: 11,
+                          ),
+                        ),
+                      ],
+                    ),
+                  ],
+                ),
+                ),
+                if (onTap != null) ...[
+                  const SizedBox(width: 8),
+                  const Icon(
+                    LucideIcons.moreVertical,
+                    size: 18,
+                    color: CaliMindColors.mutedForeground,
+                  ),
+                ],
+              ],
             ),
-          ],
+          ),
         ),
       ),
-    ).animate(delay: Duration(milliseconds: index * 60)).fadeIn(duration: 350.ms).slideX(begin: 0.05);
+    )
+        .animate(delay: Duration(milliseconds: index * 60))
+        .fadeIn(duration: 350.ms)
+        .slideX(begin: 0.05);
   }
 }
 
@@ -127,7 +189,8 @@ class _BufferCard extends StatelessWidget {
       ),
       child: Row(
         children: [
-          Icon(LucideIcons.coffee, size: 11, color: CaliMindColors.primary.withValues(alpha: 0.5)),
+          Icon(LucideIcons.coffee,
+              size: 11, color: CaliMindColors.primary.withValues(alpha: 0.5)),
           const SizedBox(width: 8),
           Text(
             '15 min buffer',

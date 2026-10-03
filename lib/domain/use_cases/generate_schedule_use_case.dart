@@ -19,7 +19,13 @@ class GenerateScheduleUseCase {
     return parts[0] * 60 + parts[1];
   }
 
-  static String _datePart(DateTime dt) => dt.toIso8601String().substring(0, 10);
+  static String _datePart(DateTime dt) {
+    final local = dt.toLocal();
+    final year = local.year.toString().padLeft(4, '0');
+    final month = local.month.toString().padLeft(2, '0');
+    final day = local.day.toString().padLeft(2, '0');
+    return '$year-$month-$day';
+  }
 
   static BigInt _priorityRank(Task task) {
     final priorityWeight = BigInt.from(task.priority) * BigInt.from(10).pow(15);
@@ -152,7 +158,8 @@ class GenerateScheduleUseCase {
 
       // If due today, constrain range end to deadline time
       if (task.deadline != null && _datePart(task.deadline!) == targetDate) {
-        final dueMinute = task.deadline!.hour * 60 + task.deadline!.minute;
+        final localDeadline = task.deadline!.toLocal();
+        final dueMinute = localDeadline.hour * 60 + localDeadline.minute;
         range = [range[0], min(range[1], dueMinute)];
       }
 

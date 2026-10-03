@@ -25,10 +25,14 @@ class RoleFocusBar extends ConsumerWidget {
 
     final items = <(String, TaskCategory?, IconData, Color)>[
       ('All', null, LucideIcons.layoutGrid, CaliMindColors.primary),
-      ('Class Rep', TaskCategory.classRep, LucideIcons.megaphone, CaliMindColors.catClass),
-      ('Club', TaskCategory.clubPresident, LucideIcons.gavel, CaliMindColors.catClub),
-      ('Study', TaskCategory.study, LucideIcons.bookOpen, CaliMindColors.catStudy),
-      ('Personal', TaskCategory.personal, LucideIcons.user, CaliMindColors.catPersonal),
+      ...TaskCategory.values.map(
+        (category) => (
+          category.label,
+          category,
+          category.icon,
+          category.color,
+        ),
+      ),
     ];
 
     return SizedBox(

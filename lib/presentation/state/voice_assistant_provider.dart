@@ -1,3 +1,6 @@
+import 'dart:async';
+
+import 'package:flutter/foundation.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:calimind/core/services/audio_recorder_service.dart';
 import 'package:calimind/core/services/groq_service.dart';
@@ -41,32 +44,44 @@ class VoiceAssistantState {
     String? errorMessage,
     bool? usedAiParser,
     bool clearError = false,
+    bool clearDraft = false,
+    bool clearParsedCommand = false,
   }) =>
       VoiceAssistantState(
         voiceState: voiceState ?? this.voiceState,
         interimTranscript: interimTranscript ?? this.interimTranscript,
         finalTranscript: finalTranscript ?? this.finalTranscript,
         soundLevel: soundLevel ?? this.soundLevel,
-        parsedCommand: parsedCommand ?? this.parsedCommand,
-        draftTask: draftTask ?? this.draftTask,
+        parsedCommand:
+            clearParsedCommand ? null : (parsedCommand ?? this.parsedCommand),
+        draftTask: clearDraft ? null : (draftTask ?? this.draftTask),
         errorMessage: clearError ? null : (errorMessage ?? this.errorMessage),
         usedAiParser: usedAiParser ?? this.usedAiParser,
       );
 }
 
 class VoiceAssistantNotifier extends StateNotifier<VoiceAssistantState> {
-  final SpeechRecognitionService _speech = SpeechRecognitionService();
-  final AudioRecorderService _recorder = AudioRecorderService();
-  final GroqService _groq = GroqService();
-  final TtsService _tts = TtsService();
+  late final SpeechRecognitionService _speech = SpeechRecognitionService();
+  late final AudioRecorderService _recorder = AudioRecorderService();
+  final GroqService _groq;
+  late final TtsService _tts = TtsService();
   final VoiceParserUseCase _fallbackParser = VoiceParserUseCase();
+  bool _isFinalizing = false;
+  int _parseSequence = 0;
+  bool _recordingAvailable = false;
 
-  VoiceAssistantNotifier() : super(const VoiceAssistantState());
+  VoiceAssistantNotifier({GroqService? groq})
+      : _groq = groq ?? GroqService(),
+        super(const VoiceAssistantState());
 
   bool get isListening => state.voiceState == VoiceState.listening;
 
   Future<void> startListening({String? currentFocusRole}) async {
-    if (state.voiceState == VoiceState.listening) return;
+    if (state.voiceState == VoiceState.listening ||
+        state.voiceState == VoiceState.processing ||
+        _isFinalizing) {
+      return;
+    }
     await HapticFeedbackUtils.mediumImpact();
 
     state = state.copyWith(
@@ -74,26 +89,25 @@ class VoiceAssistantNotifier extends StateNotifier<VoiceAssistantState> {
       interimTranscript: '',
       finalTranscript: '',
       soundLevel: 0.0,
-      parsedCommand: null,
-      draftTask: null,
       clearError: true,
+      clearDraft: true,
+      clearParsedCommand: true,
       usedAiParser: false,
     );
 
-    // Concurrently start high-fidelity recorder for Groq Whisper
-    await _recorder.startRecording();
+    // Use one microphone pipeline at a time; the recorder and native speech
+    // recognizer compete for microphone input on several Android devices.
+    try {
+      _recordingAvailable = await _recorder.startRecording() != null;
+    } catch (error) {
+      debugPrint('Could not start voice recording: $error');
+      _recordingAvailable = false;
+    }
+
+    if (_recordingAvailable) return;
 
     final ok = await _speech.initialize();
     if (!ok) {
-      // SpeechToText not available on some environments (e.g. desktop/simulator without mic dictation)
-      // Check if recorder is active - if so, user can still speak and transcribe via Groq
-      if (_recorder.isRecording) {
-        state = state.copyWith(
-          interimTranscript: 'Listening with Groq Whisper...',
-        );
-        return;
-      }
-
       state = state.copyWith(
         voiceState: VoiceState.error,
         errorMessage: 'Microphone or speech recognition not available.',
@@ -104,65 +118,135 @@ class VoiceAssistantNotifier extends StateNotifier<VoiceAssistantState> {
     await _speech.startListening(
       onResult: (words, isFinal) {
         if (isFinal) {
-          _onFinalTranscript(words, currentFocusRole: currentFocusRole);
+          state = state.copyWith(
+            finalTranscript: words,
+            interimTranscript: words,
+          );
         } else {
           state = state.copyWith(interimTranscript: words);
         }
       },
       onSoundLevelChange: (level) {
-        state = state.copyWith(soundLevel: ((level + 2.0) / 12.0).clamp(0.0, 1.0));
+        state =
+            state.copyWith(soundLevel: ((level + 2.0) / 12.0).clamp(0.0, 1.0));
       },
     );
   }
 
   Future<void> stopListening({String? currentFocusRole}) async {
-    await _speech.stopListening();
-    final audioPath = await _recorder.stopRecording();
+    await _finishCapture(currentFocusRole: currentFocusRole);
+  }
 
-    state = state.copyWith(voiceState: VoiceState.processing);
+  Future<void> _finishCapture({
+    String? currentFocusRole,
+  }) async {
+    if (_isFinalizing) return;
+    _isFinalizing = true;
+    try {
+      final wasRecording = _recordingAvailable;
+      if (!wasRecording) await _speech.stopListening();
+      final audioPath = await _recorder.stopRecording();
+      state = state.copyWith(voiceState: VoiceState.processing);
 
-    String transcript = state.interimTranscript;
-
-    // If Groq API key is configured, transcribe audio with Whisper for maximum precision
-    if (audioPath != null) {
-      final groqTranscript = await _groq.transcribeAudio(audioPath);
-      if (groqTranscript != null && groqTranscript.isNotEmpty) {
-        transcript = groqTranscript;
+      String capturedTranscript;
+      if (wasRecording) {
+        if (audioPath == null) {
+          state = state.copyWith(
+            voiceState: VoiceState.error,
+            errorMessage:
+                'The recording could not be opened. Please try speaking again.',
+          );
+          return;
+        }
+        try {
+          final groqTranscript = await _groq.transcribeAudio(audioPath);
+          if (groqTranscript == null || groqTranscript.trim().isEmpty) {
+            state = state.copyWith(
+              voiceState: VoiceState.error,
+              errorMessage:
+                  'I couldn’t transcribe that recording. Check your connection and try again.',
+            );
+            return;
+          }
+          capturedTranscript = groqTranscript.trim();
+        } catch (error) {
+          debugPrint('Groq voice transcription failed: $error');
+          state = state.copyWith(
+            voiceState: VoiceState.error,
+            errorMessage:
+                'I couldn’t transcribe that recording. Check your connection and try again.',
+          );
+          return;
+        }
+      } else {
+        capturedTranscript = state.finalTranscript.trim().isNotEmpty
+            ? state.finalTranscript.trim()
+            : state.interimTranscript.trim();
       }
-    }
 
-    if (transcript.isNotEmpty) {
-      await _onFinalTranscript(transcript, currentFocusRole: currentFocusRole);
-    } else {
-      state = state.copyWith(voiceState: VoiceState.idle);
+      if (capturedTranscript.isEmpty) {
+        state = state.copyWith(
+          voiceState: VoiceState.error,
+          errorMessage:
+              'I didn’t catch that. Tap the microphone and try again.',
+        );
+        return;
+      }
+      state = state.copyWith(finalTranscript: capturedTranscript);
+      await processTranscript(
+        capturedTranscript,
+        currentFocusRole: currentFocusRole,
+      );
+    } catch (error) {
+      debugPrint('Could not finish voice capture: $error');
+      state = state.copyWith(
+        voiceState: VoiceState.error,
+        errorMessage: 'I couldn’t process that recording. Please try again.',
+      );
+    } finally {
+      _isFinalizing = false;
+      _recordingAvailable = false;
     }
   }
 
-  Future<void> _onFinalTranscript(
+  Future<void> processTranscript(
     String transcript, {
     String? currentFocusRole,
-  }) async {
+  }  ) async {
+    final requestSequence = ++_parseSequence;
+    final cleanTranscript = transcript.trim();
     state = state.copyWith(
       voiceState: VoiceState.processing,
-      finalTranscript: transcript,
+      finalTranscript: cleanTranscript,
     );
 
     ParsedCommand? command;
     var usedAi = false;
+    var aiUnavailable = false;
 
-    // 1. Try intelligent Groq LLaMA 3.3 parsing
     try {
       command = await _groq.parseVoiceCommandWithAI(
-        transcript,
+        cleanTranscript,
         currentFocusRole: currentFocusRole,
       );
       if (command != null) {
         usedAi = true;
+      } else {
+        aiUnavailable = true;
       }
-    } catch (_) {}
+    } catch (error) {
+      debugPrint('Groq command parsing failed: $error');
+      aiUnavailable = true;
+    }
 
-    // 2. Fallback to deterministic regex parser if offline or API key absent
-    command ??= _fallbackParser.parse(transcript);
+    if (command == null || command is UnknownCommand) {
+      final fallbackCommand = _fallbackParser.parse(cleanTranscript);
+      if (fallbackCommand is! UnknownCommand) {
+        command = fallbackCommand;
+        usedAi = false;
+      }
+    }
+    if (requestSequence != _parseSequence) return;
 
     NewTask? draft;
     if (command is AddTaskCommand) {
@@ -170,11 +254,23 @@ class VoiceAssistantNotifier extends StateNotifier<VoiceAssistantState> {
     }
 
     state = state.copyWith(
-      voiceState: VoiceState.idle,
+      voiceState: draft == null ? VoiceState.error : VoiceState.idle,
       parsedCommand: command,
       draftTask: draft,
       usedAiParser: usedAi,
+      errorMessage: draft == null
+          ? aiUnavailable
+              ? 'The AI assistant could not be reached, and I could not structure that request. Check your connection and try again.'
+              : _couldNotFindTaskMessage(cleanTranscript)
+          : null,
+      clearError: draft != null,
     );
+  }
+
+  String _couldNotFindTaskMessage(String transcript) {
+    final excerpt =
+        transcript.length > 80 ? '${transcript.substring(0, 77)}…' : transcript;
+    return 'I heard “$excerpt” but couldn’t find an action to turn into a task. Try describing what you need to do in your own words.';
   }
 
   Future<void> speakConfirmation(String taskTitle) async {
@@ -195,17 +291,19 @@ class VoiceAssistantNotifier extends StateNotifier<VoiceAssistantState> {
   }
 
   void dismiss() {
+    _parseSequence++;
     state = state.copyWith(
-      parsedCommand: null,
-      draftTask: null,
       interimTranscript: '',
       finalTranscript: '',
       usedAiParser: false,
+      clearDraft: true,
+      clearParsedCommand: true,
     );
   }
 }
 
-final groqServiceProvider = Provider<GroqService>((ref) => GroqService());
+final aventorVoiceServiceProvider =
+    Provider<GroqService>((ref) => GroqService());
 
 final voiceAssistantProvider =
     StateNotifierProvider<VoiceAssistantNotifier, VoiceAssistantState>(

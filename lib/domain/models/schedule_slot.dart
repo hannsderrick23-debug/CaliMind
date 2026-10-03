@@ -7,6 +7,7 @@ class ScheduleSlot {
   final String startTime; // "HH:mm"
   final String endTime;   // "HH:mm"
   final int duration;     // minutes
+  final String? scheduleDate;
 
   const ScheduleSlot({
     required this.taskId,
@@ -15,6 +16,7 @@ class ScheduleSlot {
     required this.startTime,
     required this.endTime,
     required this.duration,
+    this.scheduleDate,
   });
 
   factory ScheduleSlot.fromJson(Map<String, dynamic> json) {
@@ -25,7 +27,8 @@ class ScheduleSlot {
       endTime: ((json['end_time'] as String?) ?? '08:30').substring(0, 5),
       taskTitle: (taskData['title'] as String?) ?? (json['task_title'] as String?) ?? 'Task',
       category: TaskCategory.fromString((taskData['category'] as String?) ?? (json['category'] as String?) ?? 'Personal'),
-      duration: json['duration'] as int? ?? 30,
+      duration: taskData['duration'] as int? ?? json['duration'] as int? ?? 30,
+      scheduleDate: json['schedule_date'] as String?,
     );
   }
 

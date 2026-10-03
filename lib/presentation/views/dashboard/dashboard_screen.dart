@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
@@ -5,14 +7,15 @@ import 'package:lucide_icons_flutter/lucide_icons.dart';
 import 'package:intl/intl.dart';
 import 'package:calimind/core/constants/app_colors.dart';
 import 'package:calimind/core/constants/app_typography.dart';
-import 'package:calimind/core/utils/haptic_feedback_utils.dart';
+import 'package:calimind/core/utils/app_feedback.dart';
 import 'package:calimind/domain/models/parsed_command.dart';
+import 'package:calimind/domain/models/task.dart';
 import 'package:calimind/presentation/state/role_focus_provider.dart';
 import 'package:calimind/presentation/state/schedule_provider.dart';
 import 'package:calimind/presentation/state/voice_assistant_provider.dart';
 import 'package:calimind/presentation/state/task_provider.dart';
+import 'package:calimind/presentation/widgets/calimind_mark.dart';
 import '../schedule/schedule_tab.dart';
-import '../tasks/task_input_sheet.dart';
 import '../tasks/task_list_tab.dart';
 import 'widgets/role_focus_bar.dart';
 import 'widgets/voice_assistant_fab.dart';
@@ -28,7 +31,7 @@ class DashboardScreen extends ConsumerStatefulWidget {
 class _DashboardScreenState extends ConsumerState<DashboardScreen>
     with SingleTickerProviderStateMixin {
   late final TabController _tabController;
-  bool _showVoiceSheet = false;
+  bool _voiceReviewOpen = false;
 
   @override
   void initState() {
@@ -46,11 +49,54 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen>
   Future<void> _handleFabTap() async {
     final voice = ref.read(voiceAssistantProvider);
     final activeRole = ref.read(roleFocusProvider)?.label;
-    if (voice.voiceState == VoiceState.listening) {
-      await ref.read(voiceAssistantProvider.notifier).stopListening(currentFocusRole: activeRole);
-    } else {
-      await ref.read(voiceAssistantProvider.notifier).startListening(currentFocusRole: activeRole);
+    if (voice.voiceState == VoiceState.processing) {
+      AppFeedback.info(
+        ScaffoldMessenger.of(context),
+        'I’m preparing the task I heard. Please wait a moment.',
+      );
+      return;
     }
+    if (voice.voiceState == VoiceState.listening) {
+      await ref
+          .read(voiceAssistantProvider.notifier)
+          .stopListening(currentFocusRole: activeRole);
+    } else {
+      await ref
+          .read(voiceAssistantProvider.notifier)
+          .startListening(currentFocusRole: activeRole);
+    }
+  }
+
+  void _presentVoiceReview() {
+    if (_voiceReviewOpen) return;
+    _voiceReviewOpen = true;
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted || ref.read(voiceAssistantProvider).draftTask == null) {
+        _voiceReviewOpen = false;
+        return;
+      }
+      showModalBottomSheet<void>(
+        context: context,
+        isScrollControlled: true,
+        useSafeArea: true,
+        backgroundColor: Colors.transparent,
+        builder: (sheetContext) => VoiceConfirmSheet(
+          onConfirmed: () {
+            Navigator.of(sheetContext).pop();
+            ref.read(voiceAssistantProvider.notifier).dismiss();
+          },
+          onDismissed: () {
+            Navigator.of(sheetContext).pop();
+            ref.read(voiceAssistantProvider.notifier).dismiss();
+          },
+        ),
+      ).whenComplete(() {
+        _voiceReviewOpen = false;
+        if (mounted && ref.read(voiceAssistantProvider).draftTask != null) {
+          ref.read(voiceAssistantProvider.notifier).dismiss();
+        }
+      });
+    });
   }
 
   Future<void> _pickDate() async {
@@ -61,8 +107,8 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen>
       firstDate: DateTime.now().subtract(const Duration(days: 30)),
       lastDate: DateTime.now().add(const Duration(days: 90)),
       builder: (ctx, child) => Theme(
-        data: ThemeData.dark().copyWith(
-          colorScheme: const ColorScheme.dark(
+        data: ThemeData.light().copyWith(
+          colorScheme: const ColorScheme.light(
             primary: CaliMindColors.primary,
             onSurface: CaliMindColors.foreground,
             surface: CaliMindColors.card,
@@ -79,70 +125,68 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen>
   @override
   Widget build(BuildContext context) {
     // Listen for voice parse completion
-    ref.listen(voiceAssistantProvider, (prev, next) {
-      if (next.draftTask != null && !_showVoiceSheet) {
-        setState(() => _showVoiceSheet = true);
-      } else if (next.parsedCommand is GenerateScheduleCommand) {
+    ref.listen(voiceAssistantProvider, (previous, next) {
+      if (next.draftTask != null && !_voiceReviewOpen) {
+        _presentVoiceReview();
+      } else if (next.parsedCommand is GenerateScheduleCommand &&
+          previous?.parsedCommand is! GenerateScheduleCommand) {
         final tasks = ref.read(taskProvider).valueOrNull ?? [];
-        ref.read(scheduleProvider.notifier).generateSchedule(tasks);
+        unawaited(_generateScheduleFromVoice(tasks));
         ref.read(voiceAssistantProvider.notifier).dismiss();
         _tabController.animateTo(1);
+        AppFeedback.success(
+          ScaffoldMessenger.of(context),
+          'Generating your schedule for the selected day.',
+        );
+      } else if (next.errorMessage != null &&
+          next.errorMessage != previous?.errorMessage) {
+        AppFeedback.error(
+          ScaffoldMessenger.of(context),
+          next.errorMessage!,
+        );
       }
     });
 
     final schedule = ref.watch(scheduleProvider);
+    final voice = ref.watch(voiceAssistantProvider);
     final dateLabel = DateFormat('EEE, MMM d').format(schedule.activeDate);
 
     return Scaffold(
       backgroundColor: CaliMindColors.background,
       appBar: _buildAppBar(dateLabel),
-      body: Stack(
+      body: Column(
         children: [
-          Column(
-            children: [
-              // Tab Bar
-              _buildTabBar(),
-              // Role Focus Bar
-              const SizedBox(height: 10),
-              const RoleFocusBar(),
-              const SizedBox(height: 4),
-              // Tab views
-              Expanded(
-                child: TabBarView(
-                  controller: _tabController,
-                  children: const [
-                    TaskListTab(),
-                    ScheduleTab(),
-                  ],
-                ),
-              ),
-            ],
-          ),
-          // Voice Confirm Sheet overlay
-          if (_showVoiceSheet)
-            Positioned.fill(
-              child: GestureDetector(
-                onTap: () {},
-                child: Container(
-                  color: Colors.black54,
-                  alignment: Alignment.bottomCenter,
-                  child: VoiceConfirmSheet(
-                    onConfirmed: () {
-                      setState(() => _showVoiceSheet = false);
-                      ref.read(voiceAssistantProvider.notifier).dismiss();
-                    },
-                    onDismissed: () {
-                      setState(() => _showVoiceSheet = false);
-                      ref.read(voiceAssistantProvider.notifier).dismiss();
-                    },
-                  ),
-                ),
-              ),
+          const SizedBox(height: 10),
+          const RoleFocusBar(),
+          if (voice.voiceState == VoiceState.listening ||
+              voice.voiceState == VoiceState.processing)
+            _buildVoiceStatus(voice),
+          const SizedBox(height: 4),
+          Expanded(
+            child: TabBarView(
+              controller: _tabController,
+              children: const [
+                TaskListTab(),
+                ScheduleTab(),
+              ],
             ),
+          ),
         ],
       ),
       bottomNavigationBar: _buildBottomBar(),
     );
+  }
+
+  Future<void> _generateScheduleFromVoice(List<Task> tasks) async {
+    try {
+      await ref.read(scheduleProvider.notifier).generateSchedule(tasks);
+    } catch (error) {
+      if (!mounted) return;
+      AppFeedback.error(
+        ScaffoldMessenger.of(context),
+        'Could not save the schedule: $error',
+      );
+    }
   }
 
   PreferredSizeWidget _buildAppBar(String dateLabel) {
@@ -153,15 +197,7 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen>
       title: Row(
         children: [
           // Logo
-          Container(
-            width: 36,
-            height: 36,
-            decoration: BoxDecoration(
-              gradient: CaliMindColors.mindGradient,
-              borderRadius: BorderRadius.circular(10),
-            ),
-            child: const Icon(LucideIcons.brain, color: Colors.white, size: 18),
-          ),
+          const CaliMindMark(size: 36),
           const SizedBox(width: 10),
           Text('CaliMind', style: CaliMindTypography.h2.copyWith(fontSize: 20)),
         ],
@@ -180,74 +216,100 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen>
             ),
             child: Row(
               children: [
-                const Icon(LucideIcons.calendar, size: 12, color: CaliMindColors.mutedForeground),
+                const Icon(LucideIcons.calendar,
+                    size: 12, color: CaliMindColors.mutedForeground),
                 const SizedBox(width: 5),
-                Text(dateLabel, style: CaliMindTypography.bodySmall.copyWith(fontWeight: FontWeight.w600)),
+                Text(dateLabel,
+                    style: CaliMindTypography.bodySmall
+                        .copyWith(fontWeight: FontWeight.w600)),
               ],
             ),
           ),
         ),
-        // + button
-        IconButton(
-          icon: const Icon(LucideIcons.plus, color: CaliMindColors.primary, size: 22),
-          tooltip: 'Add Task',
-          onPressed: () => showModalBottomSheet(
-            context: context,
-            isScrollControlled: true,
-            backgroundColor: Colors.transparent,
-            builder: (_) => const TaskInputSheet(),
-          ),
-        ),
         // Settings
         IconButton(
-          icon: const Icon(LucideIcons.settings, color: CaliMindColors.mutedForeground, size: 20),
+          icon: const Icon(LucideIcons.settings,
+              color: CaliMindColors.mutedForeground, size: 20),
           onPressed: () => context.push('/settings'),
         ),
       ],
     );
   }
 
-  Widget _buildTabBar() {
-    return Padding(
-      padding: const EdgeInsets.symmetric(horizontal: 20),
-      child: Container(
-        height: 38,
-        decoration: BoxDecoration(
-          color: CaliMindColors.card,
-          borderRadius: BorderRadius.circular(10),
-          border: Border.all(color: CaliMindColors.cardBorder),
-        ),
-        child: TabBar(
-          controller: _tabController,
-          indicator: BoxDecoration(
-            gradient: CaliMindColors.mindGradient,
-            borderRadius: BorderRadius.circular(8),
-          ),
-          indicatorSize: TabBarIndicatorSize.tab,
-          labelStyle: CaliMindTypography.bodySmall.copyWith(fontWeight: FontWeight.w600),
-          unselectedLabelStyle: CaliMindTypography.bodySmall,
-          labelColor: Colors.white,
-          unselectedLabelColor: CaliMindColors.mutedForeground,
-          dividerColor: Colors.transparent,
-          tabs: const [
-            Tab(
-              child: Row(
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  Icon(LucideIcons.listTodo, size: 13),
-                  SizedBox(width: 5),
-                  Text('Tasks'),
-                ],
+  Widget _buildBottomBar() {
+    return SafeArea(
+      top: false,
+      minimum: const EdgeInsets.fromLTRB(16, 8, 16, 14),
+      child: SizedBox(
+        height: 76,
+        child: Stack(
+          clipBehavior: Clip.none,
+          children: [
+            Positioned(
+              left: 0,
+              right: 0,
+              bottom: 0,
+              child: Container(
+                height: 64,
+                decoration: BoxDecoration(
+                  color: CaliMindColors.card,
+                  borderRadius: BorderRadius.circular(26),
+                  border: Border.all(color: CaliMindColors.cardBorder),
+                  boxShadow: [
+                    BoxShadow(
+                      color: CaliMindColors.foreground.withValues(alpha: 0.08),
+                      blurRadius: 20,
+                      offset: const Offset(0, 6),
+                    ),
+                  ],
+                ),
+                child: Row(
+                  children: [
+                    Expanded(
+                      child: _buildNavigationItem(
+                        label: 'Tasks',
+                        icon: LucideIcons.listTodo,
+                        selected: _tabController.index == 0,
+                        onTap: () => _tabController.animateTo(0),
+                      ),
+                    ),
+                    const Expanded(child: SizedBox.shrink()),
+                    Expanded(
+                      child: _buildNavigationItem(
+                        label: 'Schedule',
+                        icon: LucideIcons.calendarDays,
+                        selected: _tabController.index == 1,
+                        onTap: () => _tabController.animateTo(1),
+                      ),
+                    ),
+                  ],
+                ),
               ),
             ),
-            Tab(
-              child: Row(
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  Icon(LucideIcons.calendarDays, size: 13),
-                  SizedBox(width: 5),
-                  Text('Schedule'),
-                ],
+            Positioned(
+              top: 0,
+              left: 0,
+              right: 0,
+              child: Center(
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    VoiceAssistantFab(onTap: _handleFabTap),
+                    Text(
+                      _voiceButtonLabel,
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      style: CaliMindTypography.bodySmall.copyWith(
+                        fontSize: 9,
+                        color: ref.watch(voiceAssistantProvider).voiceState ==
+                                VoiceState.listening
+                            ? CaliMindColors.destructive
+                            : CaliMindColors.primary,
+                        fontWeight: FontWeight.w700,
+                      ),
+                    ),
+                  ],
+                ),
               ),
             ),
           ],
@@ -256,52 +318,107 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen>
     );
   }
 
-  Widget _buildBottomBar() {
+  String get _voiceButtonLabel {
+    final voice = ref.read(voiceAssistantProvider);
+    return switch (voice.voiceState) {
+      VoiceState.listening => 'Listening · tap to finish',
+      VoiceState.processing => 'Processing…',
+      VoiceState.error => 'Try voice again',
+      VoiceState.idle => 'Voice',
+    };
+  }
+
+  Widget _buildVoiceStatus(VoiceAssistantState voice) {
+    final isListening = voice.voiceState == VoiceState.listening;
+    final transcript = voice.interimTranscript.isNotEmpty
+        ? voice.interimTranscript
+        : voice.finalTranscript;
     return Container(
-      height: 90,
-      decoration: const BoxDecoration(
-        color: CaliMindColors.background,
-        border: Border(top: BorderSide(color: CaliMindColors.cardBorder)),
+      margin: const EdgeInsets.fromLTRB(20, 8, 20, 4),
+      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 9),
+      decoration: BoxDecoration(
+        color: isListening
+            ? CaliMindColors.destructive.withValues(alpha: 0.08)
+            : CaliMindColors.primary.withValues(alpha: 0.08),
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(
+          color: isListening
+              ? CaliMindColors.destructive.withValues(alpha: 0.3)
+              : CaliMindColors.primary.withValues(alpha: 0.25),
+        ),
       ),
-      child: Stack(
-        clipBehavior: Clip.none,
-        alignment: Alignment.center,
+      child: Row(
         children: [
-          // Voice interim transcript
-          Consumer(builder: (context, ref, _) {
-            final voice = ref.watch(voiceAssistantProvider);
-            if (voice.voiceState == VoiceState.listening && voice.interimTranscript.isNotEmpty) {
-              return Positioned(
-                top: 8,
-                left: 24,
-                right: 24,
-                child: Text(
-                  voice.interimTranscript,
-                  style: CaliMindTypography.bodySmall.copyWith(color: CaliMindColors.primary),
-                  textAlign: TextAlign.center,
-                  maxLines: 1,
-                  overflow: TextOverflow.ellipsis,
-                ),
-              );
-            }
-            return const SizedBox.shrink();
-          }),
-          // Centered FAB (tap = voice, long-press = manual input)
-          Consumer(builder: (context, ref, _) {
-            return GestureDetector(
-              onLongPress: () {
-                HapticFeedbackUtils.mediumImpact();
-                showModalBottomSheet(
-                  context: context,
-                  isScrollControlled: true,
-                  backgroundColor: Colors.transparent,
-                  builder: (_) => const TaskInputSheet(),
-                );
-              },
-              child: VoiceAssistantFab(onTap: _handleFabTap),
-            );
-          }),
+          Icon(
+            isListening ? LucideIcons.mic : LucideIcons.sparkles,
+            size: 17,
+            color: isListening
+                ? CaliMindColors.destructive
+                : CaliMindColors.primary,
+          ),
+          const SizedBox(width: 9),
+          Expanded(
+            child: Text(
+              isListening
+                  ? (transcript.isEmpty
+                      ? 'Listening… Tap the red mic when you are done.'
+                      : 'Listening: “$transcript”')
+                  : 'Sending your recording for transcription and task details…',
+              maxLines: 2,
+              overflow: TextOverflow.ellipsis,
+              style: CaliMindTypography.bodySmall.copyWith(
+                color: CaliMindColors.foreground,
+                fontWeight: FontWeight.w600,
+              ),
+            ),
+          ),
         ],
+      ),
+    );
+  }
+
+  Widget _buildNavigationItem({
+    required String label,
+    required IconData icon,
+    required bool selected,
+    required VoidCallback onTap,
+  }) {
+    final color =
+        selected ? CaliMindColors.primary : CaliMindColors.mutedForeground;
+    return Semantics(
+      button: true,
+      selected: selected,
+      label: label,
+      child: Padding(
+        padding: const EdgeInsets.symmetric(horizontal: 2, vertical: 5),
+        child: Material(
+          color: selected ? CaliMindColors.surfaceOverlay : Colors.transparent,
+          borderRadius: BorderRadius.circular(16),
+          child: InkWell(
+            borderRadius: BorderRadius.circular(16),
+            onTap: onTap,
+            child: SizedBox.expand(
+              child: Column(
+                mainAxisAlignment: MainAxisAlignment.center,
+                children: [
+                  Icon(icon, size: 21, color: color),
+                  const SizedBox(height: 3),
+                  Text(
+                    label,
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    style: CaliMindTypography.bodySmall.copyWith(
+                      fontSize: 10,
+                      color: color,
+                      fontWeight:
+                          selected ? FontWeight.w700 : FontWeight.w500,
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ),
+        ),
       ),
     );
   }

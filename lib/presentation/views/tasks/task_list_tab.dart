@@ -23,7 +23,14 @@ class TaskListTab extends ConsumerWidget {
         child: CircularProgressIndicator(color: CaliMindColors.primary),
       ),
       error: (e, _) => Center(
-        child: Text('Error loading tasks', style: CaliMindTypography.bodyMedium),
+        child: Padding(
+          padding: const EdgeInsets.all(24),
+          child: Text(
+            'Could not load tasks: ${taskOperationErrorMessage(e)}',
+            textAlign: TextAlign.center,
+            style: CaliMindTypography.bodyMedium,
+          ),
+        ),
       ),
       data: (allTasks) {
         final filtered = focus == null
@@ -34,7 +41,7 @@ class TaskListTab extends ConsumerWidget {
         final done = filtered.where((t) => t.completed).toList();
 
         if (filtered.isEmpty) {
-          return _buildEmptyState(focus);
+          return _buildEmptyState(context, focus);
         }
 
         return RefreshIndicator(
@@ -44,6 +51,15 @@ class TaskListTab extends ConsumerWidget {
           child: ListView(
             padding: const EdgeInsets.fromLTRB(20, 16, 20, 120),
             children: [
+              Align(
+                alignment: Alignment.centerRight,
+                child: FilledButton.icon(
+                  onPressed: () => _showTaskInput(context),
+                  icon: const Icon(LucideIcons.plus, size: 18),
+                  label: const Text('Add task'),
+                ),
+              ),
+              const SizedBox(height: 16),
               if (active.isNotEmpty) ...[
                 _SectionHeader(
                   label: 'Active',
@@ -69,7 +85,15 @@ class TaskListTab extends ConsumerWidget {
                   color: CaliMindColors.success,
                 ),
                 const SizedBox(height: 8),
-                ...done.map((t) => TaskCard(task: t)),
+                ...done.map((t) => TaskCard(
+                      task: t,
+                      onEdit: () => showModalBottomSheet(
+                        context: context,
+                        isScrollControlled: true,
+                        backgroundColor: Colors.transparent,
+                        builder: (_) => TaskInputSheet(taskToEdit: t),
+                      ),
+                    )),
               ],
             ],
           ),
@@ -78,7 +102,7 @@ class TaskListTab extends ConsumerWidget {
     );
   }
 
-  Widget _buildEmptyState(TaskCategory? focus) {
+  Widget _buildEmptyState(BuildContext context, TaskCategory? focus) {
     return Center(
       child: Column(
         mainAxisAlignment: MainAxisAlignment.center,
@@ -108,8 +132,23 @@ class TaskListTab extends ConsumerWidget {
             style: CaliMindTypography.label,
             textAlign: TextAlign.center,
           ),
+          const SizedBox(height: 20),
+          FilledButton.icon(
+            onPressed: () => _showTaskInput(context),
+            icon: const Icon(LucideIcons.plus, size: 18),
+            label: const Text('Create a task manually'),
+          ),
         ],
       ).animate().fadeIn(duration: 500.ms).scale(begin: const Offset(0.9, 0.9)),
+    );
+  }
+
+  void _showTaskInput(BuildContext context) {
+    showModalBottomSheet<void>(
+      context: context,
+      isScrollControlled: true,
+      backgroundColor: Colors.transparent,
+      builder: (_) => const TaskInputSheet(),
     );
   }
 }

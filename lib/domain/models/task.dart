@@ -6,22 +6,40 @@ enum TaskCategory {
   classRep('Class Rep'),
   clubPresident('Club President'),
   study('Study'),
+  work('Work'),
+  health('Health & Fitness'),
+  errands('Errands'),
+  family('Family'),
+  finance('Finance'),
+  social('Social'),
   personal('Personal');
 
   const TaskCategory(this.label);
   final String label;
 
-  static TaskCategory fromString(String val) => switch (val.trim()) {
-        'Class Rep' => TaskCategory.classRep,
-        'Club President' => TaskCategory.clubPresident,
-        'Study' => TaskCategory.study,
+  static TaskCategory fromString(String val) {
+    final normalized = val.trim().toLowerCase();
+    return TaskCategory.values.firstWhere(
+      (category) => category.label.toLowerCase() == normalized,
+      orElse: () => switch (normalized) {
+        'class_rep' => TaskCategory.classRep,
+        'club_president' => TaskCategory.clubPresident,
+        'health' => TaskCategory.health,
         _ => TaskCategory.personal,
-      };
+      },
+    );
+  }
 
   IconData get icon => switch (this) {
         TaskCategory.classRep => LucideIcons.megaphone,
         TaskCategory.clubPresident => LucideIcons.gavel,
         TaskCategory.study => LucideIcons.bookOpen,
+        TaskCategory.work => LucideIcons.briefcaseBusiness,
+        TaskCategory.health => LucideIcons.heartPulse,
+        TaskCategory.errands => LucideIcons.shoppingCart,
+        TaskCategory.family => LucideIcons.house,
+        TaskCategory.finance => LucideIcons.wallet,
+        TaskCategory.social => LucideIcons.usersRound,
         TaskCategory.personal => LucideIcons.user,
       };
 
@@ -29,6 +47,12 @@ enum TaskCategory {
         TaskCategory.classRep => CaliMindColors.catClass,
         TaskCategory.clubPresident => CaliMindColors.catClub,
         TaskCategory.study => CaliMindColors.catStudy,
+        TaskCategory.work => const Color(0xFF326A9D),
+        TaskCategory.health => const Color(0xFFB5475E),
+        TaskCategory.errands => const Color(0xFF8A5A00),
+        TaskCategory.family => const Color(0xFF70428F),
+        TaskCategory.finance => const Color(0xFF287A55),
+        TaskCategory.social => const Color(0xFFA04F2B),
         TaskCategory.personal => CaliMindColors.catPersonal,
       };
 }
@@ -63,6 +87,7 @@ class Task {
   final DateTime? deadline;
   final PreferredTime? preferredTime;
   final String? specificTime;
+  final DateTime? reminderAt;
   final int priority; // 1 (High), 2 (Medium), 3 (Low)
   final bool completed;
   final DateTime? completedAt;
@@ -79,6 +104,7 @@ class Task {
     this.deadline,
     this.preferredTime,
     this.specificTime,
+    this.reminderAt,
     required this.priority,
     required this.completed,
     this.completedAt,
@@ -96,6 +122,9 @@ class Task {
         deadline: json['deadline'] != null ? DateTime.parse(json['deadline'] as String) : null,
         preferredTime: PreferredTime.fromString(json['preferred_time'] as String?),
         specificTime: json['specific_time'] as String?,
+        reminderAt: json['reminder_at'] == null
+            ? null
+            : DateTime.parse(json['reminder_at'] as String),
         priority: json['priority'] as int? ?? 2,
         completed: json['completed'] as bool? ?? false,
         completedAt: json['completed_at'] != null ? DateTime.parse(json['completed_at'] as String) : null,
@@ -110,9 +139,10 @@ class Task {
         'description': description,
         'category': category.label,
         'duration': duration,
-        'deadline': deadline?.toIso8601String(),
+        'deadline': deadline?.toUtc().toIso8601String(),
         'preferred_time': preferredTime?.label,
         'specific_time': specificTime,
+        'reminder_at': reminderAt?.toUtc().toIso8601String(),
         'priority': priority,
         'completed': completed,
         'completed_at': completedAt?.toIso8601String(),
@@ -130,6 +160,11 @@ class Task {
     DateTime? deadline,
     PreferredTime? preferredTime,
     String? specificTime,
+    DateTime? reminderAt,
+    bool clearReminder = false,
+    bool clearSpecificTime = false,
+    bool clearDeadline = false,
+    bool clearPreferredTime = false,
     int? priority,
     bool? completed,
     DateTime? completedAt,
@@ -143,9 +178,12 @@ class Task {
         description: description ?? this.description,
         category: category ?? this.category,
         duration: duration ?? this.duration,
-        deadline: deadline ?? this.deadline,
-        preferredTime: preferredTime ?? this.preferredTime,
-        specificTime: specificTime ?? this.specificTime,
+        deadline: clearDeadline ? null : (deadline ?? this.deadline),
+        preferredTime:
+            clearPreferredTime ? null : (preferredTime ?? this.preferredTime),
+        specificTime:
+            clearSpecificTime ? null : (specificTime ?? this.specificTime),
+        reminderAt: clearReminder ? null : (reminderAt ?? this.reminderAt),
         priority: priority ?? this.priority,
         completed: completed ?? this.completed,
         completedAt: completedAt ?? this.completedAt,
@@ -162,6 +200,7 @@ class NewTask {
   final DateTime? deadline;
   final PreferredTime? preferredTime;
   final String? specificTime;
+  final DateTime? reminderAt;
   final int priority;
 
   const NewTask({
@@ -172,6 +211,7 @@ class NewTask {
     this.deadline,
     this.preferredTime,
     this.specificTime,
+    this.reminderAt,
     required this.priority,
   });
 
@@ -181,9 +221,10 @@ class NewTask {
         'description': description,
         'category': category.label,
         'duration': duration,
-        'deadline': deadline?.toIso8601String(),
+        'deadline': deadline?.toUtc().toIso8601String(),
         'preferred_time': preferredTime?.label,
         'specific_time': specificTime,
+        'reminder_at': reminderAt?.toUtc().toIso8601String(),
         'priority': priority,
         'completed': false,
       };
@@ -196,6 +237,11 @@ class NewTask {
     DateTime? deadline,
     PreferredTime? preferredTime,
     String? specificTime,
+    DateTime? reminderAt,
+    bool clearReminder = false,
+    bool clearSpecificTime = false,
+    bool clearDeadline = false,
+    bool clearPreferredTime = false,
     int? priority,
   }) =>
       NewTask(
@@ -203,9 +249,12 @@ class NewTask {
         description: description ?? this.description,
         category: category ?? this.category,
         duration: duration ?? this.duration,
-        deadline: deadline ?? this.deadline,
-        preferredTime: preferredTime ?? this.preferredTime,
-        specificTime: specificTime ?? this.specificTime,
+        deadline: clearDeadline ? null : (deadline ?? this.deadline),
+        preferredTime:
+            clearPreferredTime ? null : (preferredTime ?? this.preferredTime),
+        specificTime:
+            clearSpecificTime ? null : (specificTime ?? this.specificTime),
+        reminderAt: clearReminder ? null : (reminderAt ?? this.reminderAt),
         priority: priority ?? this.priority,
       );
 }

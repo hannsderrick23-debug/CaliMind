@@ -24,7 +24,7 @@ dependencies:
 
   # Voice & Audio Hardware
   speech_to_text: ^7.0.0          # Native iOS SFSpeechRecognizer & Android SpeechRecognizer
-  record: ^5.2.0                  # Fallback high-fidelity audio recorder for Whisper API
+  record: ^7.1.1                  # Fallback high-fidelity audio recorder for Whisper API
   flutter_tts: ^4.2.0             # Native Text-To-Speech audio feedback
   audioplayers: ^6.1.0            # Sound effects & feedback chimes
 
@@ -44,11 +44,29 @@ dependencies:
   lucide_icons_flutter: ^3.1.21   # Modern Lucide icons
   flutter_animate: ^4.5.0         # Micro-interactions & mic-pulse animations
   intl: ^0.20.2                   # Date formatting and localization
+  font_awesome_flutter: ^11.0.0
+  timezone: ^0.10.1
+  flutter_timezone: ^5.1.0
+  firebase_core: ^4.15.0
+  firebase_messaging: ^16.7.0
 
 dev_dependencies:
   flutter_test:
     sdk: flutter
   flutter_lints: ^4.0.0
+  flutter_launcher_icons: ^0.14.4
 
 flutter:
   uses-material-design: true
+  assets:
+    - assets/branding/welcome_background.png
+    - assets/branding/calimind_icon.png
+
+flutter_launcher_icons:
+  android: true
+  ios: false
+  image_path: assets/branding/calimind_icon.png
+  min_sdk_android: 21
+  remove_alpha_ios: true
+  adaptive_icon_background: "#641A91"
+  adaptive_icon_foreground: assets/branding/calimind_mark.png
