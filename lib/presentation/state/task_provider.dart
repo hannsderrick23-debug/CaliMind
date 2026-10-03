@@ -123,6 +123,22 @@ class TaskNotifier extends StateNotifier<AsyncValue<List<Task>>> {
     } catch (error) {
       debugPrint('Could not update reminder for task $id: $error');
     }
+    if (completed && updated.recurrence != null) {
+      try {
+        final refreshed = await _repo.getTasks();
+        final currentTasks = state.valueOrNull ?? [];
+        final matchingOccurrences = refreshed
+            .where((task) => task.recurrenceSourceId == updated.id);
+        final nextOccurrence =
+            matchingOccurrences.isEmpty ? null : matchingOccurrences.first;
+        if (nextOccurrence != null &&
+            !currentTasks.any((task) => task.id == nextOccurrence.id)) {
+          state = AsyncValue.data([nextOccurrence, ...currentTasks]);
+        }
+      } catch (error) {
+        debugPrint('Could not refresh recurring task ${updated.id}: $error');
+      }
+    }
     return true;
   }
 }

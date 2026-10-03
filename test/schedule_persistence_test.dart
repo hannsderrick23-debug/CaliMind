@@ -1,4 +1,5 @@
 import 'package:flutter_test/flutter_test.dart';
+import 'package:calimind/core/utils/date_time_utils.dart';
 import 'package:calimind/data/datasources/schedule_remote_datasource.dart';
 import 'package:calimind/data/repositories/schedule_repository_impl.dart';
 import 'package:calimind/domain/models/schedule_slot.dart';
@@ -52,8 +53,9 @@ class _FakeScheduleDatasource implements ScheduleRemoteDatasource {
 Task _task({
   required String id,
   required String title,
-  required String specificTime,
+  required String? specificTime,
   DateTime? deadline,
+  bool completed = false,
 }) =>
     Task(
       id: id,
@@ -64,7 +66,7 @@ Task _task({
       specificTime: specificTime,
       deadline: deadline,
       priority: 1,
-      completed: false,
+      completed: completed,
       createdAt: DateTime(2026, 10, 3),
       updatedAt: DateTime(2026, 10, 3),
     );
@@ -134,6 +136,118 @@ void main() {
 
     expect(result.slots.single.startTime, '15:30');
     expect(datasource.byDate['2026-10-04']?.single.startTime, '15:30');
+  });
+
+  test('preview does not persist until reviewed schedule is explicitly saved',
+      () async {
+    final datasource = _FakeScheduleDatasource()
+      ..byDate['2026-10-04'] = const [
+        ScheduleSlot(
+          taskId: 'existing-plan',
+          taskTitle: 'Existing plan',
+          category: TaskCategory.personal,
+          startTime: '09:00',
+          endTime: '09:30',
+          duration: 30,
+          scheduleDate: '2026-10-04',
+        ),
+      ];
+    final notifier = ScheduleNotifier(
+      ScheduleRepositoryImpl(datasource: datasource),
+    );
+    addTearDown(notifier.dispose);
+    notifier.changeDate(DateTime(2026, 10, 4));
+    await Future<void>.delayed(Duration.zero);
+
+    final draft = notifier.previewSchedule([
+      _task(
+        id: 'task-1',
+        title: 'Study chemistry',
+        specificTime: '15:30',
+      ),
+    ]);
+
+    expect(
+      datasource.byDate['2026-10-04']?.single.taskId,
+      'existing-plan',
+    );
+    await notifier.saveReviewedSchedule(
+      draft,
+      slots: draft.result.slots,
+      unscheduled: draft.result.unscheduled,
+    );
+    expect(datasource.byDate['2026-10-04']?.single.startTime, '15:30');
+  });
+
+  test(
+      'replanning excludes completed tasks, preserves exact times, and starts'
+      ' remaining work no earlier than now', () async {
+    final datasource = _FakeScheduleDatasource()
+      ..byDate['2026-10-04'] = const [
+        ScheduleSlot(
+          taskId: 'fixed',
+          taskTitle: 'Fixed task',
+          category: TaskCategory.study,
+          startTime: '15:30',
+          endTime: '16:15',
+          duration: 45,
+          scheduleDate: '2026-10-04',
+        ),
+        ScheduleSlot(
+          taskId: 'complete',
+          taskTitle: 'Already complete',
+          category: TaskCategory.study,
+          startTime: '09:00',
+          endTime: '09:45',
+          duration: 45,
+          scheduleDate: '2026-10-04',
+        ),
+      ];
+    final notifier = ScheduleNotifier(
+      ScheduleRepositoryImpl(datasource: datasource),
+      clock: () => DateTime(2026, 10, 4, 11),
+    );
+    addTearDown(notifier.dispose);
+    notifier.changeDate(DateTime(2026, 10, 4));
+    await Future<void>.delayed(Duration.zero);
+
+    final draft = notifier.previewRemainingSchedule([
+      _task(
+        id: 'fixed',
+        title: 'Fixed task',
+        specificTime: '15:30',
+      ),
+      _task(
+        id: 'complete',
+        title: 'Already complete',
+        specificTime: '09:00',
+        completed: true,
+      ),
+      _task(
+        id: 'floating',
+        title: 'Remaining task',
+        specificTime: null,
+      ),
+    ]);
+
+    expect(draft.result.slots.map((slot) => slot.taskId),
+        containsAll(['fixed', 'floating']));
+    expect(draft.result.slots.map((slot) => slot.taskId),
+        isNot(contains('complete')));
+    expect(
+      draft.result.slots.firstWhere((slot) => slot.taskId == 'fixed').startTime,
+      '15:30',
+    );
+    expect(
+      DateTimeUtils.toMinutes(
+        draft.result.slots
+            .firstWhere((slot) => slot.taskId == 'floating')
+            .startTime,
+      ),
+      greaterThanOrEqualTo(11 * 60),
+    );
+    expect(datasource.byDate['2026-10-04']?.map((slot) => slot.taskId),
+        contains('complete'));
   });
 
   test('schedule persistence failures are surfaced rather than hidden',

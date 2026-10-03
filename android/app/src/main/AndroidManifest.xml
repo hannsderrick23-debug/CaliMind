@@ -3,6 +3,7 @@
     
     <!-- Audio & Speech Recognition Permissions -->
     <uses-permission android:name="android.permission.RECORD_AUDIO" />
+    <uses-permission android:name="android.permission.READ_CALENDAR" />
     <uses-permission android:name="android.permission.INTERNET" />
     <uses-permission android:name="android.permission.ACCESS_NETWORK_STATE" />
     
@@ -38,6 +39,9 @@
                 <action android:name="android.intent.action.MAIN"/>
                 <category android:name="android.intent.category.LAUNCHER"/>
             </intent-filter>
+            <intent-filter>
+                <action android:name="es.antonborri.home_widget.action.LAUNCH" />
+            </intent-filter>
             <intent-filter android:label="CaliMind authentication">
                 <action android:name="android.intent.action.VIEW" />
                 <category android:name="android.intent.category.DEFAULT" />
@@ -46,7 +50,26 @@
                     android:scheme="io.supabase.calimind"
                     android:host="login-callback" />
             </intent-filter>
+            <intent-filter android:label="CaliMind voice capture">
+                <action android:name="android.intent.action.VIEW" />
+                <category android:name="android.intent.category.DEFAULT" />
+                <category android:name="android.intent.category.BROWSABLE" />
+                <data
+                    android:scheme="io.supabase.calimind"
+                    android:host="voice-capture" />
+            </intent-filter>
         </activity>
+        <receiver
+            android:name=".CaliMindWidgetProvider"
+            android:exported="true"
+            android:label="CaliMind">
+            <intent-filter>
+                <action android:name="android.appwidget.action.APPWIDGET_UPDATE" />
+            </intent-filter>
+            <meta-data
+                android:name="android.appwidget.provider"
+                android:resource="@xml/calimind_widget_info" />
+        </receiver>
         <receiver
             android:exported="false"
             android:name="com.dexterous.flutterlocalnotifications.ScheduledNotificationReceiver" />

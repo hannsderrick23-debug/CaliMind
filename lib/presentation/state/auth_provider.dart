@@ -6,6 +6,7 @@ import 'package:supabase_flutter/supabase_flutter.dart';
 import 'package:supabase_flutter/supabase_flutter.dart' as supabase;
 import 'package:calimind/core/services/biometric_service.dart';
 import 'package:calimind/core/services/push_notification_service.dart';
+import 'package:calimind/core/services/widget_service.dart';
 import 'package:calimind/data/datasources/audit_remote_datasource.dart';
 
 enum AuthStatus {
@@ -349,6 +350,7 @@ class AuthNotifier extends StateNotifier<AuthState> {
       }
     }
     await PushNotificationService.instance.unregisterCurrentDevice();
+    await WidgetService.clearPublishedTaskTitle();
     try {
       await Supabase.instance.client.auth.signOut();
     } catch (error) {

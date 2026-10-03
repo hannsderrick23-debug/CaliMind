@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_animate/flutter_animate.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:go_router/go_router.dart';
 import 'package:intl/intl.dart';
 import 'package:lucide_icons_flutter/lucide_icons.dart';
 import 'package:share_plus/share_plus.dart';
@@ -9,6 +10,8 @@ import 'package:calimind/core/constants/app_typography.dart';
 import 'package:calimind/core/utils/app_feedback.dart';
 import 'package:calimind/core/utils/haptic_feedback_utils.dart';
 import 'package:calimind/domain/models/task.dart';
+import 'package:calimind/core/services/widget_service.dart';
+import 'package:calimind/presentation/state/schedule_provider.dart';
 import 'package:calimind/presentation/state/task_provider.dart';
 
 class TaskCard extends ConsumerWidget {
@@ -28,6 +31,7 @@ class TaskCard extends ConsumerWidget {
         await HapticFeedbackUtils.heavyImpact();
         final deleted =
             await ref.read(taskProvider.notifier).deleteTask(task.id);
+        if (deleted) await _refreshWidget(ref);
         if (context.mounted) {
           if (deleted) {
             AppFeedback.success(
@@ -75,6 +79,7 @@ class TaskCard extends ConsumerWidget {
                         task.id,
                         !task.completed,
                       );
+                      if (changed) await _refreshWidget(ref);
                       if (context.mounted) {
                         if (changed) {
                           AppFeedback.success(
@@ -136,6 +141,20 @@ class TaskCard extends ConsumerWidget {
                     ),
                   ),
                   const SizedBox(width: 8),
+                  if (!task.completed)
+                    IconButton(
+                      tooltip: 'Start focus session',
+                      visualDensity: VisualDensity.compact,
+                      constraints:
+                          const BoxConstraints.tightFor(width: 34, height: 34),
+                      padding: EdgeInsets.zero,
+                      onPressed: () => context.push('/focus', extra: task),
+                      icon: const Icon(
+                        LucideIcons.timer,
+                        size: 18,
+                        color: CaliMindColors.primary,
+                      ),
+                    ),
                   _PriorityBadge(priority: task.priority),
                 ],
               ),
@@ -194,6 +213,7 @@ class TaskCard extends ConsumerWidget {
                           task.id,
                           !task.completed,
                         );
+                        if (changed) await _refreshWidget(ref);
                         if (!context.mounted) return;
                         if (changed) {
                           AppFeedback.success(
@@ -292,6 +312,12 @@ class TaskCard extends ConsumerWidget {
         : 'Could not update task: $error';
   }
 
+  Future<void> _refreshWidget(WidgetRef ref) => WidgetService.refresh(
+        ref.read(taskProvider).valueOrNull ?? const <Task>[],
+        scheduledTaskIds:
+            ref.read(scheduleProvider).slots.map((slot) => slot.taskId),
+      );
+
   Future<void> _shareAnnouncement(BuildContext context) async {
     final text =
         '📢 [Class Rep Announcement]\n\n${task.title}\n${task.description ?? ''}\n\nShared via CaliMind';
@@ -318,6 +344,7 @@ class TaskCard extends ConsumerWidget {
     );
     if (confirmed == true) {
       final deleted = await ref.read(taskProvider.notifier).deleteTask(task.id);
+      if (deleted) await _refreshWidget(ref);
       if (context.mounted) {
         if (deleted) {
           AppFeedback.success(

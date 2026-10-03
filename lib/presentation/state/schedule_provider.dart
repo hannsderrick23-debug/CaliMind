@@ -1,9 +1,23 @@
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:calimind/core/utils/date_time_utils.dart';
+import 'package:calimind/core/services/widget_service.dart';
 import 'package:calimind/data/repositories/schedule_repository_impl.dart';
 import 'package:calimind/domain/models/schedule_slot.dart';
+import 'package:calimind/domain/models/calendar_busy_interval.dart';
 import 'package:calimind/domain/models/task.dart';
 import 'package:calimind/domain/use_cases/generate_schedule_use_case.dart';
+
+class ScheduleDraft {
+  final String date;
+  final ScheduleResult result;
+  final bool isReplan;
+
+  const ScheduleDraft({
+    required this.date,
+    required this.result,
+    this.isReplan = false,
+  });
+}
 
 class ScheduleState {
   final List<ScheduleSlot> slots;
@@ -51,10 +65,16 @@ class ScheduleState {
 
 class ScheduleNotifier extends StateNotifier<ScheduleState> {
   final ScheduleRepositoryImpl _repo;
-  final GenerateScheduleUseCase _scheduler = GenerateScheduleUseCase();
+  final GenerateScheduleUseCase _scheduler;
+  final DateTime Function() _clock;
 
-  ScheduleNotifier(this._repo)
-      : super(ScheduleState(
+  ScheduleNotifier(
+    this._repo, {
+    GenerateScheduleUseCase? scheduler,
+    DateTime Function()? clock,
+  })  : _scheduler = scheduler ?? GenerateScheduleUseCase(),
+        _clock = clock ?? DateTime.now,
+        super(ScheduleState(
           activeDate: DateTime.now(),
           calendarMonth: DateTime(DateTime.now().year, DateTime.now().month),
         )) {
@@ -113,23 +133,115 @@ class ScheduleNotifier extends StateNotifier<ScheduleState> {
   }
 
   Future<ScheduleResult> generateSchedule(List<Task> tasks) async {
-    state = state.copyWith(isGenerating: true, clearError: true);
     final dateStr = DateTimeUtils.toIsoDate(state.activeDate);
-    final dateOnlyTasks = tasks.where((task) {
-      final deadline = task.deadline?.toLocal();
-      return deadline == null ||
-          DateTimeUtils.toIsoDate(deadline) == dateStr ||
-          DateTimeUtils.toIsoDate(deadline).compareTo(dateStr) < 0;
+    final result = _buildSchedule(tasks, dateStr);
+    await _saveSchedule(result, dateStr, tasks);
+    return result;
+  }
+
+  /// Builds a candidate without writing it or changing the currently loaded plan.
+  ScheduleDraft previewSchedule(
+    List<Task> tasks, {
+    List<CalendarBusyInterval> busyIntervals = const [],
+  }) {
+    final date = DateTimeUtils.toIsoDate(state.activeDate);
+    return ScheduleDraft(
+      date: date,
+      result: _buildSchedule(
+        tasks,
+        date,
+        busyIntervals: busyIntervals,
+      ),
+    );
+  }
+
+  /// Rebuilds today's remaining work while preserving future exact-time slots.
+  ScheduleDraft previewRemainingSchedule(
+    List<Task> tasks, {
+    List<CalendarBusyInterval> busyIntervals = const [],
+  }) {
+    final date = DateTimeUtils.toIsoDate(state.activeDate);
+    final incompleteTasks =
+        _tasksForDate(tasks, date).where((task) => !task.completed).toList();
+    final targetTime = _clock();
+    final now = targetTime.toLocal();
+    final targetMinute = DateTimeUtils.toIsoDate(now) == date
+        ? now.hour * 60 +
+            now.minute +
+            (now.second > 0 || now.millisecond > 0 || now.microsecond > 0
+                ? 1
+                : 0)
+        : 0;
+    final taskIds = incompleteTasks.map((task) => task.id).toSet();
+    final preservedSlots = state.slots.where((slot) {
+      if (!taskIds.contains(slot.taskId)) return false;
+      final task = incompleteTasks.firstWhere((task) => task.id == slot.taskId);
+      if (task.specificTime == null) return false;
+      final start = DateTimeUtils.toMinutes(slot.startTime);
+      return DateTimeUtils.toIsoDate(now) != date || start >= targetMinute;
     }).toList();
-    final result = _scheduler.execute(dateOnlyTasks, dateStr);
+    final result = _scheduler.execute(
+      incompleteTasks,
+      date,
+      targetTime: targetTime,
+      preservedSlots: preservedSlots,
+      busyIntervals: busyIntervals,
+    );
+    return ScheduleDraft(date: date, result: result, isReplan: true);
+  }
+
+  /// Persists a draft only when the caller explicitly confirms its review.
+  Future<void> saveReviewedSchedule(
+    ScheduleDraft draft, {
+    required List<ScheduleSlot> slots,
+    required List<UnscheduledTask> unscheduled,
+    List<Task> tasks = const [],
+  }) =>
+      _saveSchedule(
+        ScheduleResult(slots: slots, unscheduled: unscheduled),
+        draft.date,
+        tasks,
+      );
+
+  List<Task> _tasksForDate(List<Task> tasks, String date) =>
+      tasks.where((task) {
+        final deadline = task.deadline?.toLocal();
+        return deadline == null ||
+            DateTimeUtils.toIsoDate(deadline) == date ||
+            DateTimeUtils.toIsoDate(deadline).compareTo(date) < 0;
+      }).toList();
+
+  ScheduleResult _buildSchedule(
+    List<Task> tasks,
+    String date, {
+    List<CalendarBusyInterval> busyIntervals = const [],
+  }) {
+    final dateOnlyTasks = _tasksForDate(tasks, date);
+    return _scheduler.execute(
+      dateOnlyTasks,
+      date,
+      busyIntervals: busyIntervals,
+    );
+  }
+
+  Future<void> _saveSchedule(
+    ScheduleResult result,
+    String dateStr,
+    List<Task> tasks,
+  ) async {
+    state = state.copyWith(isGenerating: true, clearError: true);
     try {
       await _repo.saveSchedule(result.slots, dateStr);
-      state = state.copyWith(
-        slots: result.slots,
-        unscheduled: result.unscheduled,
-        isGenerating: false,
-        isLoaded: true,
-      );
+      if (DateTimeUtils.toIsoDate(state.activeDate) == dateStr) {
+        state = state.copyWith(
+          slots: result.slots,
+          unscheduled: result.unscheduled,
+          isGenerating: false,
+          isLoaded: true,
+        );
+      } else {
+        state = state.copyWith(isGenerating: false);
+      }
     } catch (error) {
       state = state.copyWith(
         isGenerating: false,
@@ -137,8 +249,15 @@ class ScheduleNotifier extends StateNotifier<ScheduleState> {
       );
       rethrow;
     }
-    await loadScheduleForMonth(state.activeDate);
-    return result;
+    final savedDate = DateTime.parse(dateStr);
+    if (state.calendarMonth.year == savedDate.year &&
+        state.calendarMonth.month == savedDate.month) {
+      await loadScheduleForMonth(savedDate);
+    }
+    await WidgetService.refresh(
+      tasks,
+      scheduledTaskIds: result.slots.map((slot) => slot.taskId),
+    );
   }
 
   Future<void> clearSchedule() async {
@@ -175,7 +294,8 @@ final scheduleRepositoryProvider = Provider<ScheduleRepositoryImpl>(
   (ref) => ScheduleRepositoryImpl(),
 );
 
-final scheduleProvider = StateNotifierProvider<ScheduleNotifier, ScheduleState>((ref) {
+final scheduleProvider =
+    StateNotifierProvider<ScheduleNotifier, ScheduleState>((ref) {
   final repo = ref.watch(scheduleRepositoryProvider);
   return ScheduleNotifier(repo);
 });

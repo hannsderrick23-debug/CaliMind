@@ -4,12 +4,16 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:lucide_icons_flutter/lucide_icons.dart';
 import 'package:calimind/core/constants/app_colors.dart';
 import 'package:calimind/core/constants/app_typography.dart';
+import 'package:calimind/core/services/device_calendar_service.dart';
 import 'package:calimind/core/services/push_notification_service.dart';
+import 'package:calimind/core/services/widget_service.dart';
 import 'package:calimind/core/utils/app_feedback.dart';
 import 'package:calimind/core/utils/date_time_utils.dart';
 import 'package:calimind/domain/models/schedule_slot.dart';
+import 'package:calimind/domain/models/calendar_busy_interval.dart';
 import 'package:calimind/domain/models/task.dart';
 import 'package:calimind/domain/use_cases/generate_schedule_use_case.dart';
+import 'package:calimind/presentation/state/device_calendar_provider.dart';
 import 'package:calimind/presentation/state/schedule_provider.dart';
 import 'package:calimind/presentation/state/task_provider.dart';
 import '../tasks/task_input_sheet.dart';
@@ -25,18 +29,96 @@ class ScheduleTab extends ConsumerStatefulWidget {
   const ScheduleTab({super.key});
 
   @override
-  ConsumerState<ScheduleTab> createState() => _ScheduleTabState();
+  ScheduleTabState createState() => ScheduleTabState();
 }
 
-class _ScheduleTabState extends ConsumerState<ScheduleTab> {
+class ScheduleTabState extends ConsumerState<ScheduleTab> {
   ScheduleViewMode _mode = ScheduleViewMode.timeline;
   final GenerateScheduleUseCase _scheduler = GenerateScheduleUseCase();
+  bool _reviewInProgress = false;
 
-  Future<void> _generate() async {
+  Future<void> generateFromVoice() => _generate();
+
+  Future<void> _generate({bool replanRemaining = false}) async {
+    if (_reviewInProgress) return;
+    if (replanRemaining && !await _confirmReplan()) return;
+    if (!mounted) return;
+    setState(() => _reviewInProgress = true);
     final tasks = ref.read(taskProvider).valueOrNull ?? [];
-    late final ScheduleResult result;
     try {
-      result = await ref.read(scheduleProvider.notifier).generateSchedule(tasks);
+      var busyIntervals = <CalendarBusyInterval>[];
+      final calendarState = ref.read(deviceCalendarProvider);
+      if (calendarState.enabled) {
+        final busyResult = await ref
+            .read(deviceCalendarProvider.notifier)
+            .getBusyIntervalsForDay(ref.read(scheduleProvider).activeDate);
+        if (busyResult.status != DeviceCalendarAccessStatus.granted) {
+          if (mounted) {
+            final message = switch (busyResult.status) {
+              DeviceCalendarAccessStatus.denied =>
+                'Calendar access was denied. Enable it in Settings or turn off calendar-aware planning.',
+              DeviceCalendarAccessStatus.restricted =>
+                'Calendar access is restricted on this device.',
+              DeviceCalendarAccessStatus.unsupported =>
+                'Read-only calendar access is unavailable on this platform.',
+              DeviceCalendarAccessStatus.disabled =>
+                'Calendar-aware planning is disabled. Try again.',
+              DeviceCalendarAccessStatus.notRequested =>
+                'Calendar permission has not been granted yet. Enable it in Settings.',
+              DeviceCalendarAccessStatus.error =>
+                'Could not read calendar busy times. Your existing plan was not changed.',
+              DeviceCalendarAccessStatus.granted => '',
+            };
+            AppFeedback.error(ScaffoldMessenger.of(context), message);
+          }
+          return;
+        }
+        busyIntervals = busyResult.intervals;
+      }
+      if (!mounted) return;
+      final notifier = ref.read(scheduleProvider.notifier);
+      final draft = replanRemaining
+          ? notifier.previewRemainingSchedule(
+              tasks,
+              busyIntervals: busyIntervals,
+            )
+          : notifier.previewSchedule(
+              tasks,
+              busyIntervals: busyIntervals,
+            );
+      final reviewed = await showDialog<ScheduleResult>(
+        context: context,
+        barrierDismissible: false,
+        builder: (_) => _ScheduleReviewDialog(
+          result: draft.result,
+          isReplan: replanRemaining,
+        ),
+      );
+      if (reviewed == null || !mounted) return;
+      await notifier.saveReviewedSchedule(
+        draft,
+        slots: reviewed.slots,
+        unscheduled: reviewed.unscheduled,
+        tasks: tasks,
+      );
+      if (!mounted) return;
+      await ref.read(voiceScheduleSummaryProvider.notifier).announce(reviewed);
+      if (mounted && reviewed.slots.isNotEmpty) {
+        final pushResult =
+            await PushNotificationService.instance.notifyScheduleGenerated(
+          scheduleDate: draft.date,
+          scheduledTaskCount: reviewed.slots.length,
+        );
+        if (mounted && !pushResult.delivered) {
+          AppFeedback.info(
+            ScaffoldMessenger.of(context),
+            pushResult.message,
+          );
+        }
+      }
+      if (mounted && reviewed.hasUnscheduled) {
+        _showNeedsAttention(reviewed.unscheduled);
+      }
     } catch (error) {
       if (mounted) {
         AppFeedback.error(
@@ -44,27 +126,34 @@ class _ScheduleTabState extends ConsumerState<ScheduleTab> {
           'Could not save the schedule: $error',
         );
       }
-      return;
-    }
-    await ref.read(voiceScheduleSummaryProvider.notifier).announce(result);
-    if (mounted && result.slots.isNotEmpty) {
-      final activeDate = ref.read(scheduleProvider).activeDate;
-      final pushResult =
-          await PushNotificationService.instance.notifyScheduleGenerated(
-        scheduleDate: DateTimeUtils.toIsoDate(activeDate),
-        scheduledTaskCount: result.slots.length,
-      );
-      if (mounted && !pushResult.delivered) {
-        AppFeedback.info(
-          ScaffoldMessenger.of(context),
-          pushResult.message,
-        );
-      }
-    }
-    if (mounted && result.hasUnscheduled) {
-      _showNeedsAttention(result.unscheduled);
+    } finally {
+      if (mounted) setState(() => _reviewInProgress = false);
     }
   }
+
+  Future<bool> _confirmReplan() async =>
+      await showDialog<bool>(
+        context: context,
+        builder: (dialogContext) => AlertDialog(
+          title: const Text('Replan remaining tasks?'),
+          content: const Text(
+            'Completed tasks will be excluded and exact-time tasks will stay '
+            'fixed. The saved plan will only be replaced after you review and '
+            'confirm the new schedule.',
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.pop(dialogContext, false),
+              child: const Text('Keep current plan'),
+            ),
+            FilledButton(
+              onPressed: () => Navigator.pop(dialogContext, true),
+              child: const Text('Continue'),
+            ),
+          ],
+        ),
+      ) ??
+      false;
 
   void _showNeedsAttention(List<UnscheduledTask> items) {
     showModalBottomSheet(
@@ -129,6 +218,7 @@ class _ScheduleTabState extends ConsumerState<ScheduleTab> {
                   selectedTask.id,
                   !selectedTask.completed,
                 );
+                if (changed) await _refreshWidget();
                 if (!mounted) return;
                 if (changed) {
                   AppFeedback.success(
@@ -151,7 +241,8 @@ class _ScheduleTabState extends ConsumerState<ScheduleTab> {
                     ? LucideIcons.rotateCcw
                     : LucideIcons.circleCheck,
               ),
-              label: Text(selectedTask.completed ? 'Reopen task' : 'Mark complete'),
+              label: Text(
+                  selectedTask.completed ? 'Reopen task' : 'Mark complete'),
             ),
             const SizedBox(height: 8),
             Row(
@@ -214,6 +305,7 @@ class _ScheduleTabState extends ConsumerState<ScheduleTab> {
     );
     if (confirmed != true) return;
     final deleted = await ref.read(taskProvider.notifier).deleteTask(task.id);
+    if (deleted) await _refreshWidget();
     if (!mounted) return;
     if (deleted) {
       AppFeedback.success(ScaffoldMessenger.of(context), 'Task deleted.');
@@ -224,6 +316,12 @@ class _ScheduleTabState extends ConsumerState<ScheduleTab> {
       );
     }
   }
+
+  Future<void> _refreshWidget() => WidgetService.refresh(
+        ref.read(taskProvider).valueOrNull ?? const <Task>[],
+        scheduledTaskIds:
+            ref.read(scheduleProvider).slots.map((slot) => slot.taskId),
+      );
 
   @override
   Widget build(BuildContext context) {
@@ -258,7 +356,7 @@ class _ScheduleTabState extends ConsumerState<ScheduleTab> {
             children: [
               Expanded(child: _buildViewSwitcher()),
               const SizedBox(width: 8),
-              _buildGenerateButton(schedule),
+              _buildScheduleActions(schedule),
             ],
           ),
         ),
@@ -282,7 +380,9 @@ class _ScheduleTabState extends ConsumerState<ScheduleTab> {
         // Schedule view
         Expanded(
           child: schedule.isGenerating
-              ? const Center(child: CircularProgressIndicator(color: CaliMindColors.primary))
+              ? const Center(
+                  child:
+                      CircularProgressIndicator(color: CaliMindColors.primary))
               : _buildCurrentView(schedule),
         ),
       ],
@@ -311,9 +411,7 @@ class _ScheduleTabState extends ConsumerState<ScheduleTab> {
             child: Padding(
               padding: const EdgeInsets.symmetric(horizontal: 2, vertical: 3),
               child: Material(
-                color: isSelected
-                    ? CaliMindColors.primary
-                    : Colors.transparent,
+                color: isSelected ? CaliMindColors.primary : Colors.transparent,
                 borderRadius: BorderRadius.circular(10),
                 child: InkWell(
                   borderRadius: BorderRadius.circular(10),
@@ -361,26 +459,60 @@ class _ScheduleTabState extends ConsumerState<ScheduleTab> {
     );
   }
 
-  Widget _buildGenerateButton(ScheduleState schedule) {
-    return GestureDetector(
-      onTap: schedule.isGenerating ? null : _generate,
-      child: Container(
-        padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
-        decoration: BoxDecoration(
-          color: CaliMindColors.primary,
-          borderRadius: BorderRadius.circular(10),
+  Widget _buildScheduleActions(ScheduleState schedule) {
+    return Row(
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        _scheduleActionButton(
+          icon: LucideIcons.zap,
+          label: 'Generate',
+          onTap: schedule.isGenerating || _reviewInProgress
+              ? null
+              : () => _generate(),
         ),
-        child: Row(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            const Icon(LucideIcons.zap, size: 13, color: Colors.white),
-            const SizedBox(width: 5),
-            Text('Generate', style: CaliMindTypography.bodySmall.copyWith(color: Colors.white, fontWeight: FontWeight.w600)),
-          ],
+        const SizedBox(width: 6),
+        _scheduleActionButton(
+          icon: LucideIcons.refreshCw,
+          label: 'Replan',
+          onTap: schedule.isGenerating || _reviewInProgress
+              ? null
+              : () => _generate(replanRemaining: true),
         ),
-      ),
+      ],
     );
   }
+
+  Widget _scheduleActionButton({
+    required IconData icon,
+    required String label,
+    required VoidCallback? onTap,
+  }) =>
+      GestureDetector(
+        onTap: onTap,
+        child: Container(
+          padding: const EdgeInsets.symmetric(horizontal: 9, vertical: 8),
+          decoration: BoxDecoration(
+            color: onTap == null
+                ? CaliMindColors.primary.withValues(alpha: 0.5)
+                : CaliMindColors.primary,
+            borderRadius: BorderRadius.circular(10),
+          ),
+          child: Row(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Icon(icon, size: 13, color: Colors.white),
+              const SizedBox(width: 4),
+              Text(
+                label,
+                style: CaliMindTypography.bodySmall.copyWith(
+                  color: Colors.white,
+                  fontWeight: FontWeight.w600,
+                ),
+              ),
+            ],
+          ),
+        ),
+      );
 
   Widget _buildUnscheduledBanner(List<UnscheduledTask> unscheduled) {
     return GestureDetector(
@@ -391,19 +523,23 @@ class _ScheduleTabState extends ConsumerState<ScheduleTab> {
         decoration: BoxDecoration(
           color: CaliMindColors.warning.withValues(alpha: 0.1),
           borderRadius: BorderRadius.circular(10),
-          border: Border.all(color: CaliMindColors.warning.withValues(alpha: 0.4)),
+          border:
+              Border.all(color: CaliMindColors.warning.withValues(alpha: 0.4)),
         ),
         child: Row(
           children: [
-            const Icon(LucideIcons.alertTriangle, size: 14, color: CaliMindColors.warning),
+            const Icon(LucideIcons.alertTriangle,
+                size: 14, color: CaliMindColors.warning),
             const SizedBox(width: 8),
             Expanded(
               child: Text(
                 '${unscheduled.length} task${unscheduled.length > 1 ? 's' : ''} couldn\'t be scheduled. Tap to see why.',
-                style: CaliMindTypography.bodySmall.copyWith(color: CaliMindColors.warning),
+                style: CaliMindTypography.bodySmall
+                    .copyWith(color: CaliMindColors.warning),
               ),
             ),
-            const Icon(LucideIcons.chevronRight, size: 14, color: CaliMindColors.warning),
+            const Icon(LucideIcons.chevronRight,
+                size: 14, color: CaliMindColors.warning),
           ],
         ),
       ).animate().shake(delay: 100.ms),
@@ -462,7 +598,8 @@ class _ScheduleTabState extends ConsumerState<ScheduleTab> {
               shape: BoxShape.circle,
               border: Border.all(color: CaliMindColors.cardBorder),
             ),
-            child: const Icon(LucideIcons.calendar, color: CaliMindColors.primary, size: 30),
+            child: const Icon(LucideIcons.calendar,
+                color: CaliMindColors.primary, size: 30),
           ),
           const SizedBox(height: 16),
           Text('No schedule yet', style: CaliMindTypography.h3),
@@ -474,7 +611,7 @@ class _ScheduleTabState extends ConsumerState<ScheduleTab> {
           ),
           const SizedBox(height: 24),
           GestureDetector(
-            onTap: _generate,
+            onTap: () => _generate(),
             child: Container(
               padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 12),
               decoration: BoxDecoration(
@@ -486,7 +623,9 @@ class _ScheduleTabState extends ConsumerState<ScheduleTab> {
                 children: [
                   const Icon(LucideIcons.zap, size: 16, color: Colors.white),
                   const SizedBox(width: 8),
-                  Text('Generate Schedule', style: CaliMindTypography.bodyMedium.copyWith(color: Colors.white, fontWeight: FontWeight.w600)),
+                  Text('Generate Schedule',
+                      style: CaliMindTypography.bodyMedium.copyWith(
+                          color: Colors.white, fontWeight: FontWeight.w600)),
                 ],
               ),
             ),
@@ -497,8 +636,242 @@ class _ScheduleTabState extends ConsumerState<ScheduleTab> {
   }
 }
 
+class _ScheduleReviewDialog extends StatefulWidget {
+  final ScheduleResult result;
+  final bool isReplan;
+
+  const _ScheduleReviewDialog({
+    required this.result,
+    required this.isReplan,
+  });
+
+  @override
+  State<_ScheduleReviewDialog> createState() => _ScheduleReviewDialogState();
+}
+
+class _ScheduleReviewDialogState extends State<_ScheduleReviewDialog> {
+  late final List<ScheduleSlot> _slots = [...widget.result.slots];
+  late final List<UnscheduledTask> _unscheduled = [
+    ...widget.result.unscheduled,
+  ];
+
+  String? get _validationMessage {
+    final sorted = [..._slots]
+      ..sort((a, b) => a.startTime.compareTo(b.startTime));
+    for (var i = 0; i < sorted.length; i++) {
+      final slot = sorted[i];
+      final start = DateTimeUtils.toMinutes(slot.startTime);
+      final end = DateTimeUtils.toMinutes(slot.endTime);
+      if (start < GenerateScheduleUseCase.dayStart ||
+          end > GenerateScheduleUseCase.dayEnd ||
+          end <= start) {
+        return 'Scheduled times must fit between 08:00 and 22:00.';
+      }
+      if (i > 0 &&
+          start - DateTimeUtils.toMinutes(sorted[i - 1].endTime) <
+              GenerateScheduleUseCase.bufferMinutes) {
+        return 'Leave at least 15 minutes between scheduled items.';
+      }
+    }
+    return null;
+  }
+
+  void _replaceSlot(int index, ScheduleSlot slot) {
+    setState(() => _slots[index] = slot);
+  }
+
+  Future<void> _editStartTime(int index) async {
+    final slot = _slots[index];
+    final minute = DateTimeUtils.toMinutes(slot.startTime);
+    final picked = await showTimePicker(
+      context: context,
+      initialTime: TimeOfDay(hour: minute ~/ 60, minute: minute % 60),
+    );
+    if (picked == null || !mounted) return;
+    final startMinute = picked.hour * 60 + picked.minute;
+    final startTime = DateTimeUtils.formatMinutes(startMinute);
+    final endTime = DateTimeUtils.formatMinutes(startMinute + slot.duration);
+    _replaceSlot(
+      index,
+      ScheduleSlot(
+        taskId: slot.taskId,
+        taskTitle: slot.taskTitle,
+        category: slot.category,
+        startTime: startTime,
+        endTime: endTime,
+        duration: slot.duration,
+        scheduleDate: slot.scheduleDate,
+      ),
+    );
+  }
+
+  void _removeSlot(int index) {
+    final removed = _slots.removeAt(index);
+    setState(() {
+      _unscheduled.add(
+        UnscheduledTask(
+          taskId: removed.taskId,
+          title: removed.taskTitle,
+          reason: 'Removed during schedule review.',
+        ),
+      );
+    });
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final validationMessage = _validationMessage;
+    return AlertDialog(
+      title:
+          Text(widget.isReplan ? 'Review remaining plan' : 'Review day plan'),
+      content: SizedBox(
+        width: 540,
+        child: ConstrainedBox(
+          constraints: BoxConstraints(
+            maxHeight: MediaQuery.sizeOf(context).height * 0.62,
+          ),
+          child: SingleChildScrollView(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: [
+                Text(
+                  'Edit or remove scheduled items before saving. Your current '
+                  'schedule stays unchanged if you cancel.',
+                  style: CaliMindTypography.bodySmall.copyWith(
+                    color: CaliMindColors.mutedForeground,
+                  ),
+                ),
+                const SizedBox(height: 12),
+                if (_slots.isEmpty)
+                  const Padding(
+                    padding: EdgeInsets.symmetric(vertical: 16),
+                    child: Text('No tasks could be scheduled for this date.'),
+                  ),
+                ..._slots.asMap().entries.map((entry) {
+                  final index = entry.key;
+                  final slot = entry.value;
+                  return Card(
+                    margin: const EdgeInsets.only(bottom: 8),
+                    child: Padding(
+                      padding: const EdgeInsets.fromLTRB(12, 5, 4, 8),
+                      child: Column(
+                        children: [
+                          Row(
+                            children: [
+                              Expanded(
+                                child: Padding(
+                                  padding:
+                                      const EdgeInsets.symmetric(vertical: 14),
+                                  child: Text(
+                                    slot.taskTitle,
+                                    style: CaliMindTypography.bodyMedium,
+                                  ),
+                                ),
+                              ),
+                              IconButton(
+                                tooltip: 'Remove from plan',
+                                onPressed: () => _removeSlot(index),
+                                icon: const Icon(
+                                  LucideIcons.trash2,
+                                  color: CaliMindColors.destructive,
+                                  size: 18,
+                                ),
+                              ),
+                            ],
+                          ),
+                          Row(
+                            children: [
+                              TextButton.icon(
+                                onPressed: () => _editStartTime(index),
+                                icon: const Icon(LucideIcons.clock, size: 16),
+                                label: Text(
+                                  '${slot.startTime} – ${slot.endTime}',
+                                ),
+                              ),
+                              const Spacer(),
+                              Text(
+                                DateTimeUtils.formatDuration(slot.duration),
+                                style: CaliMindTypography.bodySmall.copyWith(
+                                  color: CaliMindColors.mutedForeground,
+                                ),
+                              ),
+                            ],
+                          ),
+                        ],
+                      ),
+                    ),
+                  );
+                }),
+                if (_unscheduled.isNotEmpty) ...[
+                  const SizedBox(height: 8),
+                  Text('Could not schedule', style: CaliMindTypography.h3),
+                  const SizedBox(height: 4),
+                  ..._unscheduled.map(
+                    (item) => Padding(
+                      padding: const EdgeInsets.only(bottom: 8),
+                      child: Row(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          const Icon(
+                            LucideIcons.alertTriangle,
+                            size: 16,
+                            color: CaliMindColors.warning,
+                          ),
+                          const SizedBox(width: 8),
+                          Expanded(
+                            child: Text(
+                              '${item.title}: ${item.reason}',
+                              style: CaliMindTypography.bodySmall,
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                  ),
+                ],
+                if (validationMessage != null) ...[
+                  const SizedBox(height: 4),
+                  Text(
+                    validationMessage,
+                    style: CaliMindTypography.bodySmall.copyWith(
+                      color: CaliMindColors.destructive,
+                    ),
+                  ),
+                ],
+              ],
+            ),
+          ),
+        ),
+      ),
+      actions: [
+        TextButton(
+          onPressed: () => Navigator.pop(context),
+          child: const Text('Cancel'),
+        ),
+        FilledButton(
+          onPressed: validationMessage == null
+              ? () {
+                  final sorted = [..._slots]
+                    ..sort((a, b) => a.startTime.compareTo(b.startTime));
+                  Navigator.pop(
+                    context,
+                    ScheduleResult(
+                      slots: sorted,
+                      unscheduled: [..._unscheduled],
+                    ),
+                  );
+                }
+              : null,
+          child: Text(widget.isReplan ? 'Replace saved plan' : 'Save plan'),
+        ),
+      ],
+    );
+  }
+}
+
 // Provider to handle TTS announcement after schedule generation
-final voiceScheduleSummaryProvider = StateNotifierProvider<_VoiceSummaryNotifier, void>(
+final voiceScheduleSummaryProvider =
+    StateNotifierProvider<_VoiceSummaryNotifier, void>(
   (ref) => _VoiceSummaryNotifier(),
 );
 

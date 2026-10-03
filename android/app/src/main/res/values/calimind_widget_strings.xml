@@ -1,0 +1,7 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="widget_description">Next task and voice shortcut</string>
+    <string name="widget_heading">UP NEXT</string>
+    <string name="widget_generic_title">Open CaliMind to see your next task</string>
+    <string name="widget_voice_shortcut">＋ Voice capture</string>
+</resources>

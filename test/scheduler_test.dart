@@ -1,4 +1,6 @@
 import 'package:flutter_test/flutter_test.dart';
+import 'package:calimind/domain/models/calendar_busy_interval.dart';
+import 'package:calimind/domain/models/schedule_slot.dart';
 import 'package:calimind/domain/models/task.dart';
 import 'package:calimind/domain/use_cases/generate_schedule_use_case.dart';
 import 'package:calimind/domain/use_cases/parse_voice_command_use_case.dart';
@@ -13,6 +15,7 @@ Task _mockTask({
   String? specificTime,
   PreferredTime? preferredTime,
   DateTime? deadline,
+  bool completed = false,
 }) =>
     Task(
       id: id,
@@ -24,7 +27,7 @@ Task _mockTask({
       specificTime: specificTime,
       preferredTime: preferredTime,
       deadline: deadline,
-      completed: false,
+      completed: completed,
       createdAt: DateTime.now(),
       updatedAt: DateTime.now(),
     );
@@ -66,6 +69,29 @@ void main() {
                 '${result.slots[i].taskTitle} ends ${result.slots[i].endTime}, '
                 '${result.slots[i + 1].taskTitle} starts ${result.slots[i + 1].startTime}');
       }
+    });
+
+    test('calendar busy intervals are blocked with rest buffers', () {
+      final task = _mockTask(
+        id: '1',
+        title: 'Prepare notes',
+        category: TaskCategory.personal,
+        duration: 60,
+      );
+
+      final result = scheduler.execute(
+        [task],
+        testDate,
+        busyIntervals: [
+          CalendarBusyInterval(
+            start: DateTime(2026, 9, 24, 9),
+            end: DateTime(2026, 9, 24, 10),
+          ),
+        ],
+      );
+
+      expect(result.slots, hasLength(1));
+      expect(result.slots.single.startTime, '10:15');
     });
 
     test('Study Cap Invariant: no study slot exceeds 120 minutes', () {
@@ -174,6 +200,85 @@ void main() {
 
       final result = scheduler.execute(tasks, testDate);
       expect(result.slots, isEmpty);
+    });
+
+    test('target time prevents floating tasks from being placed in the past',
+        () {
+      final result = scheduler.execute(
+        [
+          _mockTask(
+            id: 'remaining',
+            title: 'Remaining task',
+            category: TaskCategory.personal,
+            duration: 30,
+          ),
+        ],
+        testDate,
+        targetTime: DateTime(2026, 9, 24, 10, 15, 1),
+      );
+
+      expect(result.slots.single.startTime, '10:16');
+    });
+
+    test('past exact-time tasks are reported as unscheduled', () {
+      final result = scheduler.execute(
+        [
+          _mockTask(
+            id: 'past-fixed',
+            title: 'Past fixed task',
+            category: TaskCategory.personal,
+            duration: 30,
+            specificTime: '10:00',
+          ),
+        ],
+        testDate,
+        targetTime: DateTime(2026, 9, 24, 10, 15),
+      );
+
+      expect(result.slots, isEmpty);
+      expect(result.unscheduled.single.reason, contains('already passed'));
+    });
+
+    test(
+        'preserved exact-time slots remain fixed while incomplete tasks replan',
+        () {
+      final fixed = _mockTask(
+        id: 'fixed',
+        title: 'Fixed task',
+        category: TaskCategory.personal,
+        duration: 30,
+        specificTime: '15:30',
+      );
+      final floating = _mockTask(
+        id: 'floating',
+        title: 'Floating task',
+        category: TaskCategory.personal,
+        duration: 30,
+      );
+      final result = scheduler.execute(
+        [fixed, floating],
+        testDate,
+        targetTime: DateTime(2026, 9, 24, 11),
+        preservedSlots: const [
+          ScheduleSlot(
+            taskId: 'fixed',
+            taskTitle: 'Fixed task',
+            category: TaskCategory.personal,
+            startTime: '15:30',
+            endTime: '16:00',
+            duration: 30,
+          ),
+        ],
+      );
+
+      expect(
+          result.slots.firstWhere((slot) => slot.taskId == 'fixed').startTime,
+          '15:30');
+      expect(
+          result.slots
+              .firstWhere((slot) => slot.taskId == 'floating')
+              .startTime,
+          '11:00');
     });
 
     test('Day boundary: tasks outside 08:00-22:00 exact times are unscheduled',
@@ -363,8 +468,7 @@ void main() {
     });
 
     test('Parses an ordinary spoken task request with an exact time', () {
-      final cmd =
-          parser.parse('Schedule a call with the class rep at 3:30 pm');
+      final cmd = parser.parse('Schedule a call with the class rep at 3:30 pm');
       expect(cmd, isA<AddTaskCommand>());
       final add = cmd as AddTaskCommand;
       expect(add.task.title, 'Call with the class rep');

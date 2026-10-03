@@ -8,7 +8,9 @@ import 'package:calimind/core/constants/app_typography.dart';
 import 'package:calimind/core/utils/haptic_feedback_utils.dart';
 import 'package:calimind/core/utils/app_feedback.dart';
 import 'package:calimind/core/services/task_reminder_service.dart';
+import 'package:calimind/core/services/widget_service.dart';
 import 'package:calimind/domain/models/task.dart';
+import 'package:calimind/presentation/state/schedule_provider.dart';
 import 'package:calimind/presentation/state/task_provider.dart';
 
 class TaskInputSheet extends ConsumerStatefulWidget {
@@ -30,6 +32,7 @@ class _TaskInputSheetState extends ConsumerState<TaskInputSheet> {
   String? _specificTime;
   DateTime? _deadline;
   DateTime? _reminderAt;
+  TaskRecurrence? _recurrence;
   bool _isSaving = false;
 
   bool get _isEditing => widget.taskToEdit != null;
@@ -48,6 +51,7 @@ class _TaskInputSheetState extends ConsumerState<TaskInputSheet> {
       _specificTime = t.specificTime;
       _deadline = t.deadline;
       _reminderAt = t.reminderAt;
+      _recurrence = t.recurrence;
     }
   }
 
@@ -82,6 +86,8 @@ class _TaskInputSheetState extends ConsumerState<TaskInputSheet> {
         clearDeadline: _deadline == null,
         reminderAt: _reminderAt,
         clearReminder: _reminderAt == null,
+        recurrence: _recurrence,
+        clearRecurrence: _recurrence == null,
       );
       if (await ref.read(taskProvider.notifier).updateTask(updated)) {
         taskId = updated.id;
@@ -98,6 +104,7 @@ class _TaskInputSheetState extends ConsumerState<TaskInputSheet> {
             specificTime: _specificTime,
             deadline: _deadline,
             reminderAt: _reminderAt,
+            recurrence: _recurrence,
           ));
       taskId = created?.id;
     }
@@ -105,8 +112,7 @@ class _TaskInputSheetState extends ConsumerState<TaskInputSheet> {
     if (taskId == null) {
       if (mounted) {
         setState(() => _isSaving = false);
-        final error =
-            ref.read(taskProvider.notifier).lastOperationError;
+        final error = ref.read(taskProvider.notifier).lastOperationError;
         AppFeedback.error(
           ScaffoldMessenger.of(context),
           error == null || error.isEmpty
@@ -116,6 +122,12 @@ class _TaskInputSheetState extends ConsumerState<TaskInputSheet> {
       }
       return;
     }
+
+    await WidgetService.refresh(
+      ref.read(taskProvider).valueOrNull ?? const <Task>[],
+      scheduledTaskIds:
+          ref.read(scheduleProvider).slots.map((slot) => slot.taskId),
+    );
 
     final reminders = TaskReminderService();
     if (_reminderAt == null &&
@@ -360,6 +372,32 @@ class _TaskInputSheetState extends ConsumerState<TaskInputSheet> {
               onClear: _reminderAt == null
                   ? null
                   : () => setState(() => _reminderAt = null),
+            ),
+            const SizedBox(height: 14),
+            _buildLabel('Repeat'),
+            const SizedBox(height: 4),
+            Text(
+              'Create the next task only after you complete this one.',
+              style: CaliMindTypography.bodySmall
+                  .copyWith(color: CaliMindColors.mutedForeground),
+            ),
+            const SizedBox(height: 8),
+            Wrap(
+              spacing: 8,
+              children: [
+                _TimeChip(
+                  label: 'Does not repeat',
+                  isSelected: _recurrence == null,
+                  onTap: () => setState(() => _recurrence = null),
+                ),
+                ...TaskRecurrence.values.map(
+                  (recurrence) => _TimeChip(
+                    label: recurrence.label,
+                    isSelected: _recurrence == recurrence,
+                    onTap: () => setState(() => _recurrence = recurrence),
+                  ),
+                ),
+              ],
             ),
             const SizedBox(height: 26),
 

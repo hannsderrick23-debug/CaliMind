@@ -18,74 +18,81 @@ class PostLoginWelcomeScreen extends ConsumerWidget {
     final firstName = metadataName?.trim().split(RegExp(r'\s+')).first;
 
     return AuthBackdrop(
+      backgroundAsset: 'assets/branding/register_photo.jpg',
       child: Center(
         child: SingleChildScrollView(
           padding: const EdgeInsets.all(22),
           child: ConstrainedBox(
             constraints: const BoxConstraints(maxWidth: 460),
-            child: GlassPanel(
-              padding: const EdgeInsets.fromLTRB(26, 32, 26, 26),
-              child: Column(
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  const CaliMindMark(size: 84),
-                  const SizedBox(height: 24),
-                  Text(
-                    firstName == null || firstName.isEmpty
-                        ? 'You’re in.'
-                        : 'Welcome, $firstName.',
-                    textAlign: TextAlign.center,
-                    style: CaliMindTypography.h1.copyWith(
-                      color: CaliMindColors.foreground,
-                      fontSize: 31,
-                    ),
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                const CaliMindMark(size: 84),
+                const SizedBox(height: 24),
+                Text(
+                  firstName == null || firstName.isEmpty
+                      ? 'You’re in.'
+                      : 'Welcome, $firstName.',
+                  textAlign: TextAlign.center,
+                  style: CaliMindTypography.h1.copyWith(
+                    color: Colors.white,
+                    fontSize: 31,
+                    shadows: const [
+                      Shadow(color: Color(0xCC101639), blurRadius: 10),
+                    ],
                   ),
-                  const SizedBox(height: 12),
-                  Text(
-                    'Your space is ready. Let’s make today feel a little more manageable.',
-                    textAlign: TextAlign.center,
-                    style: CaliMindTypography.bodyMedium.copyWith(
-                      color: CaliMindColors.mutedForeground,
-                      height: 1.55,
-                    ),
+                ),
+                const SizedBox(height: 12),
+                Text(
+                  'Your space is ready. Let’s make today feel a little more manageable.',
+                  textAlign: TextAlign.center,
+                  style: CaliMindTypography.bodyMedium.copyWith(
+                    color: Colors.white.withValues(alpha: 0.9),
+                    height: 1.55,
+                    shadows: const [
+                      Shadow(color: Color(0xCC101639), blurRadius: 8),
+                    ],
                   ),
-                  const SizedBox(height: 28),
-                  SizedBox(
-                    width: double.infinity,
-                    height: 54,
-                    child: ElevatedButton.icon(
-                      onPressed: () => context.go('/dashboard'),
-                      style: ElevatedButton.styleFrom(
-                        backgroundColor: CaliMindColors.primary,
-                        shape: RoundedRectangleBorder(
-                          borderRadius: BorderRadius.circular(16),
-                        ),
+                ),
+                const SizedBox(height: 28),
+                SizedBox(
+                  width: double.infinity,
+                  height: 54,
+                  child: ElevatedButton.icon(
+                    onPressed: () => context.go('/dashboard'),
+                    style: ElevatedButton.styleFrom(
+                      backgroundColor: CaliMindColors.primary,
+                      shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(16),
                       ),
-                      icon: const Icon(
-                        LucideIcons.arrowRight,
+                    ),
+                    icon: const Icon(
+                      LucideIcons.arrowRight,
+                      color: Colors.white,
+                      size: 18,
+                    ),
+                    label: const Text(
+                      'Open my planner',
+                      style: TextStyle(
                         color: Colors.white,
-                        size: 18,
-                      ),
-                      label: const Text(
-                        'Open my planner',
-                        style: TextStyle(
-                          color: Colors.white,
-                          fontWeight: FontWeight.w700,
-                        ),
+                        fontWeight: FontWeight.w700,
                       ),
                     ),
                   ),
-                  const SizedBox(height: 14),
-                  Text(
-                    'Your plans stay yours. You’re always in control.',
-                    textAlign: TextAlign.center,
-                    style: TextStyle(
-                      color: CaliMindColors.mutedForeground,
-                      fontSize: 12,
-                    ),
+                ),
+                const SizedBox(height: 14),
+                Text(
+                  'Your plans stay yours. You’re always in control.',
+                  textAlign: TextAlign.center,
+                  style: TextStyle(
+                    color: Colors.white.withValues(alpha: 0.84),
+                    fontSize: 12,
+                    shadows: const [
+                      Shadow(color: Color(0xCC101639), blurRadius: 8),
+                    ],
                   ),
-                ],
-              ),
+                ),
+              ],
             ),
           ),
         ),

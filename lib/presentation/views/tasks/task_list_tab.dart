@@ -7,6 +7,7 @@ import 'package:calimind/core/constants/app_typography.dart';
 import 'package:calimind/domain/models/task.dart';
 import 'package:calimind/presentation/state/role_focus_provider.dart';
 import 'package:calimind/presentation/state/task_provider.dart';
+import 'package:calimind/presentation/widgets/weekly_progress_widget.dart';
 import 'task_input_sheet.dart';
 import 'widgets/task_card.dart';
 
@@ -59,6 +60,8 @@ class TaskListTab extends ConsumerWidget {
                   label: const Text('Add task'),
                 ),
               ),
+              const SizedBox(height: 16),
+              WeeklyProgressWidget(tasks: allTasks),
               const SizedBox(height: 16),
               if (active.isNotEmpty) ...[
                 _SectionHeader(

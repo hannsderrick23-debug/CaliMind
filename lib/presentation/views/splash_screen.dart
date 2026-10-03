@@ -11,35 +11,44 @@ class SplashScreen extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return AuthBackdrop(
+      showWelcomeImage: true,
       child: Center(
         child: GlassPanel(
-          padding: const EdgeInsets.symmetric(horizontal: 48, vertical: 42),
+          glass: true,
+          padding: const EdgeInsets.symmetric(horizontal: 34, vertical: 38),
           borderRadius: BorderRadius.circular(32),
           child: Column(
             mainAxisSize: MainAxisSize.min,
             children: [
-              const CaliMindMark(size: 84)
+              const CaliMindMark(size: 88)
                   .animate()
-                  .fadeIn(duration: 500.ms),
-              const SizedBox(height: 18),
+                  .fadeIn(duration: 550.ms)
+                  .scale(
+                    begin: const Offset(0.86, 0.86),
+                    curve: Curves.easeOutBack,
+                  ),
+              const SizedBox(height: 24),
               Text(
                 'CaliMind',
                 style: CaliMindTypography.h1.copyWith(
                   color: CaliMindColors.foreground,
-                  fontSize: 32,
+                  fontSize: 36,
+                  letterSpacing: -0.8,
                 ),
-              ).animate().fadeIn(duration: 700.ms).slideY(begin: 0.12),
-              const SizedBox(height: 10),
+              ).animate().fadeIn(delay: 120.ms).slideY(begin: 0.1),
+              const SizedBox(height: 8),
               Text(
                 'A little more clarity, every day.',
-                style: CaliMindTypography.label.copyWith(
+                textAlign: TextAlign.center,
+                style: CaliMindTypography.bodyMedium.copyWith(
                   color: CaliMindColors.mutedForeground,
+                  letterSpacing: 0.2,
                 ),
-              ).animate().fadeIn(delay: 250.ms),
-              const SizedBox(height: 26),
+              ).animate().fadeIn(delay: 260.ms),
+              const SizedBox(height: 38),
               const SizedBox(
-                width: 20,
-                height: 20,
+                width: 22,
+                height: 22,
                 child: CircularProgressIndicator(
                   strokeWidth: 2,
                   color: CaliMindColors.primary,
@@ -47,7 +56,7 @@ class SplashScreen extends StatelessWidget {
               ),
             ],
           ),
-        ).animate().fadeIn(duration: 500.ms).scale(begin: const Offset(0.96, 0.96)),
+        ),
       ),
     );
   }

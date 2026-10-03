@@ -6,9 +6,11 @@ import 'package:lucide_icons_flutter/lucide_icons.dart';
 import 'package:calimind/core/constants/app_colors.dart';
 import 'package:calimind/core/constants/app_typography.dart';
 import 'package:calimind/core/services/task_reminder_service.dart';
+import 'package:calimind/core/services/widget_service.dart';
 import 'package:calimind/core/utils/haptic_feedback_utils.dart';
 import 'package:calimind/core/utils/app_feedback.dart';
 import 'package:calimind/domain/models/task.dart';
+import 'package:calimind/presentation/state/schedule_provider.dart';
 import 'package:calimind/presentation/state/task_provider.dart';
 import 'package:calimind/presentation/state/voice_assistant_provider.dart';
 
@@ -54,17 +56,19 @@ class _VoiceConfirmSheetState extends ConsumerState<VoiceConfirmSheet> {
     if (created == null) {
       if (mounted) {
         setState(() => _isSaving = false);
-        final error =
-            ref.read(taskProvider.notifier).lastOperationError;
         AppFeedback.error(
           ScaffoldMessenger.of(context),
-          error == null || error.isEmpty
-              ? 'Could not save this task. Check your connection and try again.'
-              : 'Could not save task: $error',
+          'Could not save this task. Check your connection and try again.',
         );
       }
       return;
     }
+
+    await WidgetService.refresh(
+      ref.read(taskProvider).valueOrNull ?? const <Task>[],
+      scheduledTaskIds:
+          ref.read(scheduleProvider).slots.map((slot) => slot.taskId),
+    );
 
     var reminderWarning = false;
     if (created.reminderAt != null) {
@@ -90,6 +94,7 @@ class _VoiceConfirmSheetState extends ConsumerState<VoiceConfirmSheet> {
     } catch (error) {
       debugPrint('Could not speak task confirmation: $error');
     }
+    if (!mounted) return;
     final messenger = ScaffoldMessenger.of(context);
     widget.onConfirmed();
     final message = reminderWarning
@@ -203,65 +208,54 @@ class _VoiceConfirmSheetState extends ConsumerState<VoiceConfirmSheet> {
                         color: Colors.white, size: 16),
                   ),
                   const SizedBox(width: 12),
-                  Expanded(
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        Row(
-                          children: [
-                            Flexible(
-                              child: Text(
-                                'Review your request',
-                                maxLines: 1,
-                                overflow: TextOverflow.ellipsis,
-                                style: CaliMindTypography.h3
-                                    .copyWith(fontSize: 16),
+                  Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Row(
+                        children: [
+                          Text('Review your request',
+                              style:
+                                  CaliMindTypography.h3.copyWith(fontSize: 16)),
+                          Consumer(builder: (context, ref, _) {
+                            final usedAi =
+                                ref.watch(voiceAssistantProvider).usedAiParser;
+                            if (!usedAi) return const SizedBox.shrink();
+                            return Container(
+                              margin: const EdgeInsets.only(left: 8),
+                              padding: const EdgeInsets.symmetric(
+                                  horizontal: 6, vertical: 2),
+                              decoration: BoxDecoration(
+                                color: CaliMindColors.primary
+                                    .withValues(alpha: 0.15),
+                                borderRadius: BorderRadius.circular(6),
+                                border: Border.all(
+                                    color: CaliMindColors.primary
+                                        .withValues(alpha: 0.3)),
                               ),
-                            ),
-                            Consumer(builder: (context, ref, _) {
-                              final usedAi = ref
-                                  .watch(voiceAssistantProvider)
-                                  .usedAiParser;
-                              if (!usedAi) return const SizedBox.shrink();
-                              return Container(
-                                margin: const EdgeInsets.only(left: 8),
-                                padding: const EdgeInsets.symmetric(
-                                    horizontal: 6, vertical: 2),
-                                decoration: BoxDecoration(
-                                  color: CaliMindColors.primary
-                                      .withValues(alpha: 0.15),
-                                  borderRadius: BorderRadius.circular(6),
-                                  border: Border.all(
-                                      color: CaliMindColors.primary
-                                          .withValues(alpha: 0.3)),
-                                ),
-                                child: Row(
-                                  mainAxisSize: MainAxisSize.min,
-                                  children: [
-                                    const Icon(LucideIcons.sparkles,
-                                        size: 10,
-                                        color: CaliMindColors.primary),
-                                    const SizedBox(width: 3),
-                                    Text('Groq AI',
-                                        style: CaliMindTypography.bodySmall
-                                            .copyWith(
-                                          fontSize: 9,
-                                          fontWeight: FontWeight.w700,
-                                          color: CaliMindColors.primary,
-                                        )),
-                                  ],
-                                ),
-                              );
-                            }),
-                          ],
-                        ),
-                        Text(
-                          'Review & confirm before saving',
-                          style: CaliMindTypography.label,
-                        ),
-                      ],
-                    ),
+                              child: Row(
+                                mainAxisSize: MainAxisSize.min,
+                                children: [
+                                  const Icon(LucideIcons.sparkles,
+                                      size: 10, color: CaliMindColors.primary),
+                                  const SizedBox(width: 3),
+                                  Text('Groq AI',
+                                      style:
+                                          CaliMindTypography.bodySmall.copyWith(
+                                        fontSize: 9,
+                                        fontWeight: FontWeight.w700,
+                                        color: CaliMindColors.primary,
+                                      )),
+                                ],
+                              ),
+                            );
+                          }),
+                        ],
+                      ),
+                      Text('Review & confirm before saving',
+                          style: CaliMindTypography.label),
+                    ],
                   ),
+                  const Spacer(),
                   IconButton(
                     onPressed: widget.onDismissed,
                     icon: const Icon(LucideIcons.x,
@@ -461,7 +455,6 @@ class _VoiceConfirmSheetState extends ConsumerState<VoiceConfirmSheet> {
         const SizedBox(height: 8),
         DropdownButtonFormField<TaskCategory>(
           initialValue: _draft.category,
-          isExpanded: true,
           dropdownColor: CaliMindColors.card,
           style: CaliMindTypography.bodySmall
               .copyWith(color: CaliMindColors.foreground),
@@ -486,15 +479,9 @@ class _VoiceConfirmSheetState extends ConsumerState<VoiceConfirmSheet> {
                       children: [
                         Icon(cat.icon, size: 13, color: cat.color),
                         const SizedBox(width: 6),
-                        Expanded(
-                          child: Text(
-                            cat.label,
-                            maxLines: 1,
-                            overflow: TextOverflow.ellipsis,
+                        Text(cat.label,
                             style: CaliMindTypography.bodySmall
-                                .copyWith(color: CaliMindColors.foreground),
-                          ),
-                        ),
+                                .copyWith(color: CaliMindColors.foreground)),
                       ],
                     ),
                   ))

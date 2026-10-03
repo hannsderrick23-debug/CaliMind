@@ -102,17 +102,10 @@ class TaskRemoteDatasourceImpl implements TaskRemoteDatasource {
   @override
   Future<Task> toggleTaskCompletion(String id, bool completed) async {
     try {
-      final response = await _requireClient()
-          .from('tasks')
-          .update({
-            'completed': completed,
-            'completed_at':
-                completed ? DateTime.now().toUtc().toIso8601String() : null,
-            'updated_at': DateTime.now().toUtc().toIso8601String(),
-          })
-          .eq('id', id)
-          .select()
-          .single();
+      final response = await _requireClient().rpc(
+        'complete_task',
+        params: {'p_task_id': id, 'p_completed': completed},
+      ).single();
       return Task.fromJson(response);
     } catch (error, stackTrace) {
       debugPrint('Could not toggle task completion in Supabase: $error');

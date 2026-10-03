@@ -77,6 +77,23 @@ enum PreferredTime {
       };
 }
 
+enum TaskRecurrence {
+  daily('daily', 'Daily', 1),
+  weekly('weekly', 'Weekly', 7);
+
+  const TaskRecurrence(this.value, this.label, this.intervalDays);
+
+  final String value;
+  final String label;
+  final int intervalDays;
+
+  static TaskRecurrence? fromString(String? value) => switch (value) {
+        'daily' => TaskRecurrence.daily,
+        'weekly' => TaskRecurrence.weekly,
+        _ => null,
+      };
+}
+
 class Task {
   final String id;
   final String userId;
@@ -91,6 +108,8 @@ class Task {
   final int priority; // 1 (High), 2 (Medium), 3 (Low)
   final bool completed;
   final DateTime? completedAt;
+  final TaskRecurrence? recurrence;
+  final String? recurrenceSourceId;
   final DateTime createdAt;
   final DateTime updatedAt;
 
@@ -108,6 +127,8 @@ class Task {
     required this.priority,
     required this.completed,
     this.completedAt,
+    this.recurrence,
+    this.recurrenceSourceId,
     required this.createdAt,
     required this.updatedAt,
   });
@@ -128,6 +149,8 @@ class Task {
         priority: json['priority'] as int? ?? 2,
         completed: json['completed'] as bool? ?? false,
         completedAt: json['completed_at'] != null ? DateTime.parse(json['completed_at'] as String) : null,
+        recurrence: TaskRecurrence.fromString(json['recurrence_rule'] as String?),
+        recurrenceSourceId: json['recurrence_source_id'] as String?,
         createdAt: json['created_at'] != null ? DateTime.parse(json['created_at'] as String) : DateTime.now(),
         updatedAt: json['updated_at'] != null ? DateTime.parse(json['updated_at'] as String) : DateTime.now(),
       );
@@ -146,6 +169,8 @@ class Task {
         'priority': priority,
         'completed': completed,
         'completed_at': completedAt?.toIso8601String(),
+        'recurrence_rule': recurrence?.value,
+        'recurrence_source_id': recurrenceSourceId,
         'created_at': createdAt.toIso8601String(),
         'updated_at': updatedAt.toIso8601String(),
       };
@@ -168,6 +193,9 @@ class Task {
     int? priority,
     bool? completed,
     DateTime? completedAt,
+    TaskRecurrence? recurrence,
+    String? recurrenceSourceId,
+    bool clearRecurrence = false,
     DateTime? createdAt,
     DateTime? updatedAt,
   }) =>
@@ -187,6 +215,8 @@ class Task {
         priority: priority ?? this.priority,
         completed: completed ?? this.completed,
         completedAt: completedAt ?? this.completedAt,
+        recurrence: clearRecurrence ? null : (recurrence ?? this.recurrence),
+        recurrenceSourceId: recurrenceSourceId ?? this.recurrenceSourceId,
         createdAt: createdAt ?? this.createdAt,
         updatedAt: updatedAt ?? this.updatedAt,
       );
@@ -202,6 +232,7 @@ class NewTask {
   final String? specificTime;
   final DateTime? reminderAt;
   final int priority;
+  final TaskRecurrence? recurrence;
 
   const NewTask({
     required this.title,
@@ -213,6 +244,7 @@ class NewTask {
     this.specificTime,
     this.reminderAt,
     required this.priority,
+    this.recurrence,
   });
 
   Map<String, dynamic> toInsertJson(String userId) => {
@@ -227,6 +259,7 @@ class NewTask {
         'reminder_at': reminderAt?.toUtc().toIso8601String(),
         'priority': priority,
         'completed': false,
+        'recurrence_rule': recurrence?.value,
       };
 
   NewTask copyWith({
@@ -243,6 +276,8 @@ class NewTask {
     bool clearDeadline = false,
     bool clearPreferredTime = false,
     int? priority,
+    TaskRecurrence? recurrence,
+    bool clearRecurrence = false,
   }) =>
       NewTask(
         title: title ?? this.title,
@@ -256,5 +291,6 @@ class NewTask {
             clearSpecificTime ? null : (specificTime ?? this.specificTime),
         reminderAt: clearReminder ? null : (reminderAt ?? this.reminderAt),
         priority: priority ?? this.priority,
+        recurrence: clearRecurrence ? null : (recurrence ?? this.recurrence),
       );
 }

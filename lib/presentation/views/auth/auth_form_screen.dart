@@ -177,9 +177,7 @@ class _AuthFormScreenState extends ConsumerState<AuthFormScreen> {
     if (!mounted) return;
 
     if (wantsSetup != true) {
-      await ref
-          .read(authProvider.notifier)
-          .finishBiometricSetup(enable: false);
+      await ref.read(authProvider.notifier).finishBiometricSetup(enable: false);
       if (!mounted) return;
       AppFeedback.success(
         ScaffoldMessenger.of(context),
@@ -193,9 +191,7 @@ class _AuthFormScreenState extends ConsumerState<AuthFormScreen> {
     );
     if (!mounted) return;
     if (!verified) {
-      await ref
-          .read(authProvider.notifier)
-          .finishBiometricSetup(enable: false);
+      await ref.read(authProvider.notifier).finishBiometricSetup(enable: false);
       if (!mounted) return;
       AppFeedback.info(
         ScaffoldMessenger.of(context),
@@ -231,8 +227,163 @@ class _AuthFormScreenState extends ConsumerState<AuthFormScreen> {
         : rememberedFirstName == null || rememberedFirstName.isEmpty
             ? 'Welcome back'
             : 'Welcome back, $rememberedFirstName';
+    final formContent = Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        Text(
+          title,
+          style: CaliMindTypography.h2.copyWith(
+            fontSize: 26,
+            color: Colors.white,
+            shadows: const [
+              Shadow(color: Color(0xCC101639), blurRadius: 10),
+            ],
+          ),
+        ),
+        const SizedBox(height: 7),
+        Text(
+          widget.isRegister
+              ? 'A clearer day starts with one small step.'
+              : 'Sign in to pick up where your mind left off.',
+          style: CaliMindTypography.bodySmall.copyWith(
+            color: Colors.white.withValues(alpha: 0.88),
+            height: 1.45,
+            shadows: const [
+              Shadow(color: Color(0xCC101639), blurRadius: 8),
+            ],
+          ),
+        ),
+        const SizedBox(height: 23),
+        _AuthField(
+          controller: _emailController,
+          label: 'Email address',
+          hint: 'you@example.com',
+          icon: LucideIcons.mail,
+          keyboardType: TextInputType.emailAddress,
+          autofillHints: const [AutofillHints.email],
+        ),
+        const SizedBox(height: 15),
+        _AuthField(
+          controller: _passwordController,
+          label: 'Password',
+          hint: 'At least 8 characters',
+          icon: LucideIcons.lockKeyhole,
+          obscureText: _obscurePassword,
+          autofillHints: [
+            widget.isRegister
+                ? AutofillHints.newPassword
+                : AutofillHints.password,
+          ],
+          suffixIcon: IconButton(
+            onPressed: () =>
+                setState(() => _obscurePassword = !_obscurePassword),
+            icon: Icon(
+              _obscurePassword ? LucideIcons.eyeOff : LucideIcons.eye,
+              size: 18,
+              color: CaliMindColors.mutedForeground,
+            ),
+          ),
+        ),
+        if (widget.isRegister) ...[
+          const SizedBox(height: 15),
+          _AuthField(
+            controller: _confirmPasswordController,
+            label: 'Confirm password',
+            hint: 'Enter your password again',
+            icon: LucideIcons.shieldCheck,
+            obscureText: _obscureConfirmPassword,
+            autofillHints: const [AutofillHints.newPassword],
+            suffixIcon: IconButton(
+              onPressed: () => setState(
+                () => _obscureConfirmPassword = !_obscureConfirmPassword,
+              ),
+              icon: Icon(
+                _obscureConfirmPassword ? LucideIcons.eyeOff : LucideIcons.eye,
+                size: 18,
+                color: CaliMindColors.mutedForeground,
+              ),
+            ),
+          ),
+        ],
+        if (!widget.isRegister) ...[
+          Align(
+            alignment: Alignment.centerRight,
+            child: TextButton(
+              onPressed: () => context.push('/forgot-password'),
+              child: Text(
+                'Forgot password?',
+                style: const TextStyle(color: Colors.white),
+              ),
+            ),
+          ),
+        ] else
+          const SizedBox(height: 12),
+        if (auth.errorMessage != null)
+          _StatusMessage(message: auth.errorMessage!, isError: true),
+        if (auth.successMessage != null)
+          _StatusMessage(message: auth.successMessage!),
+        if (auth.errorMessage != null || auth.successMessage != null)
+          const SizedBox(height: 12),
+        _PrimaryAuthButton(
+          isLoading: auth.isLoading,
+          label: widget.isRegister ? 'Create account' : 'Sign in',
+          onPressed: _submit,
+        ),
+        if (!widget.isRegister) ...[
+          const SizedBox(height: 12),
+          OutlinedButton.icon(
+            onPressed: auth.isLoading ? null : _unlockWithBiometrics,
+            icon: const Icon(LucideIcons.fingerprint),
+            label: const Text('Sign in with biometrics'),
+            style: OutlinedButton.styleFrom(
+              minimumSize: const Size.fromHeight(50),
+              foregroundColor: Colors.white,
+              side: BorderSide(
+                color: Colors.white.withValues(alpha: 0.7),
+              ),
+              backgroundColor: Colors.white.withValues(alpha: 0.12),
+            ),
+          ),
+        ],
+        const SizedBox(height: 20),
+        OAuthButtons(isLoading: auth.isLoading, photoStyle: true),
+        const SizedBox(height: 17),
+        Wrap(
+          alignment: WrapAlignment.center,
+          crossAxisAlignment: WrapCrossAlignment.center,
+          children: [
+            Text(
+              widget.isRegister
+                  ? 'Already have an account?'
+                  : 'New to CaliMind?',
+              style: TextStyle(
+                color: Colors.white.withValues(alpha: 0.9),
+                shadows: const [
+                  Shadow(color: Color(0xCC101639), blurRadius: 8),
+                ],
+              ),
+            ),
+            TextButton(
+              onPressed: () => context.go(
+                widget.isRegister ? '/login' : '/register',
+              ),
+              child: Text(
+                widget.isRegister ? 'Sign in' : 'Create account',
+                style: TextStyle(
+                  color: Colors.white,
+                  fontWeight: FontWeight.w700,
+                ),
+              ),
+            ),
+          ],
+        ),
+      ],
+    );
 
     return AuthBackdrop(
+      backgroundAsset: widget.isRegister
+          ? 'assets/branding/register_photo.jpg'
+          : 'assets/branding/welcome_photo.jpg',
       child: Center(
         child: SingleChildScrollView(
           padding: const EdgeInsets.fromLTRB(22, 14, 22, 24),
@@ -245,16 +396,15 @@ class _AuthFormScreenState extends ConsumerState<AuthFormScreen> {
                   child: IconButton(
                     tooltip: 'Back',
                     onPressed: () => context.go('/welcome'),
-                    icon:
-                        const Icon(
-                          LucideIcons.arrowLeft,
-                          color: CaliMindColors.foreground,
-                        ),
+                    icon: Icon(
+                      LucideIcons.arrowLeft,
+                      color: Colors.white,
+                    ),
                     style: IconButton.styleFrom(
-                      foregroundColor: CaliMindColors.foreground,
-                      backgroundColor: CaliMindColors.card,
+                      foregroundColor: Colors.white,
+                      backgroundColor: Colors.white.withValues(alpha: 0.14),
                       side: BorderSide(
-                        color: CaliMindColors.cardBorder,
+                        color: Colors.white.withValues(alpha: 0.48),
                       ),
                     ),
                   ),
@@ -265,173 +415,27 @@ class _AuthFormScreenState extends ConsumerState<AuthFormScreen> {
                 Text(
                   'CaliMind',
                   style: CaliMindTypography.h2.copyWith(
-                    color: CaliMindColors.foreground,
+                    color: Colors.white,
                     fontSize: 25,
+                    shadows: const [
+                      Shadow(color: Color(0xCC101639), blurRadius: 8),
+                    ],
                   ),
                 ),
                 const SizedBox(height: 24),
-                GlassPanel(
-                  padding: const EdgeInsets.fromLTRB(22, 24, 22, 20),
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.stretch,
-                    children: [
-                      Text(
-                        title,
-                        style: CaliMindTypography.h2.copyWith(
-                          fontSize: 26,
-                          color: CaliMindColors.foreground,
-                        ),
-                      ),
-                      const SizedBox(height: 7),
-                      Text(
-                        widget.isRegister
-                            ? 'A clearer day starts with one small step.'
-                            : 'Sign in to pick up where your mind left off.',
-                        style: CaliMindTypography.bodySmall.copyWith(
-                          color: CaliMindColors.mutedForeground,
-                          height: 1.45,
-                        ),
-                      ),
-                      const SizedBox(height: 23),
-                      _AuthField(
-                        controller: _emailController,
-                        label: 'Email address',
-                        hint: 'you@example.com',
-                        icon: LucideIcons.mail,
-                        keyboardType: TextInputType.emailAddress,
-                        autofillHints: const [AutofillHints.email],
-                      ),
-                      const SizedBox(height: 15),
-                      _AuthField(
-                        controller: _passwordController,
-                        label: 'Password',
-                        hint: 'At least 8 characters',
-                        icon: LucideIcons.lockKeyhole,
-                        obscureText: _obscurePassword,
-                        autofillHints: [
-                          widget.isRegister
-                              ? AutofillHints.newPassword
-                              : AutofillHints.password,
-                        ],
-                        suffixIcon: IconButton(
-                          onPressed: () => setState(
-                            () => _obscurePassword = !_obscurePassword,
-                          ),
-                          icon: Icon(
-                            _obscurePassword
-                                ? LucideIcons.eyeOff
-                                : LucideIcons.eye,
-                            size: 18,
-                            color: CaliMindColors.mutedForeground,
-                          ),
-                        ),
-                      ),
-                      if (widget.isRegister) ...[
-                        const SizedBox(height: 15),
-                        _AuthField(
-                          controller: _confirmPasswordController,
-                          label: 'Confirm password',
-                          hint: 'Enter your password again',
-                          icon: LucideIcons.shieldCheck,
-                          obscureText: _obscureConfirmPassword,
-                          autofillHints: const [AutofillHints.newPassword],
-                          suffixIcon: IconButton(
-                            onPressed: () => setState(
-                              () => _obscureConfirmPassword =
-                                  !_obscureConfirmPassword,
-                            ),
-                            icon: Icon(
-                              _obscureConfirmPassword
-                                  ? LucideIcons.eyeOff
-                                  : LucideIcons.eye,
-                              size: 18,
-                              color: CaliMindColors.mutedForeground,
-                            ),
-                          ),
-                        ),
-                      ],
-                      if (!widget.isRegister) ...[
-                        Align(
-                          alignment: Alignment.centerRight,
-                          child: TextButton(
-                            onPressed: () => context.push('/forgot-password'),
-                            child: const Text(
-                              'Forgot password?',
-                              style: TextStyle(color: CaliMindColors.primary),
-                            ),
-                          ),
-                        ),
-                      ] else
-                        const SizedBox(height: 12),
-                      if (auth.errorMessage != null)
-                        _StatusMessage(
-                          message: auth.errorMessage!,
-                          isError: true,
-                        ),
-                      if (auth.successMessage != null)
-                        _StatusMessage(message: auth.successMessage!),
-                      if (auth.errorMessage != null ||
-                          auth.successMessage != null)
-                        const SizedBox(height: 12),
-                      _PrimaryAuthButton(
-                        isLoading: auth.isLoading,
-                        label: widget.isRegister ? 'Create account' : 'Sign in',
-                        onPressed: _submit,
-                      ),
-                      if (!widget.isRegister) ...[
-                        const SizedBox(height: 12),
-                        OutlinedButton.icon(
-                          onPressed:
-                              auth.isLoading ? null : _unlockWithBiometrics,
-                          icon: const Icon(LucideIcons.fingerprint),
-                          label: const Text('Sign in with biometrics'),
-                          style: OutlinedButton.styleFrom(
-                            minimumSize: const Size.fromHeight(50),
-                            foregroundColor: CaliMindColors.primary,
-                            side: const BorderSide(
-                              color: CaliMindColors.cardBorder,
-                            ),
-                          ),
-                        ),
-                      ],
-                      const SizedBox(height: 20),
-                      OAuthButtons(isLoading: auth.isLoading),
-                      const SizedBox(height: 17),
-                      Wrap(
-                        alignment: WrapAlignment.center,
-                        crossAxisAlignment: WrapCrossAlignment.center,
-                        children: [
-                          Text(
-                            widget.isRegister
-                                ? 'Already have an account?'
-                                : 'New to CaliMind?',
-                            style: TextStyle(
-                              color: CaliMindColors.mutedForeground,
-                            ),
-                          ),
-                          TextButton(
-                            onPressed: () => context.go(
-                              widget.isRegister ? '/login' : '/register',
-                            ),
-                            child: Text(
-                              widget.isRegister ? 'Sign in' : 'Create account',
-                              style: const TextStyle(
-                                color: CaliMindColors.primary,
-                                fontWeight: FontWeight.w700,
-                              ),
-                            ),
-                          ),
-                        ],
-                      ),
-                    ],
-                  ),
+                Padding(
+                  padding: const EdgeInsets.fromLTRB(4, 0, 4, 0),
+                  child: formContent,
                 ).animate().fadeIn(duration: 500.ms).slideY(begin: 0.08),
                 const SizedBox(height: 18),
                 Text(
                   'A little more clarity, one day at a time.',
                   style: TextStyle(
-                    color: CaliMindColors.mutedForeground,
+                    color: Colors.white.withValues(alpha: 0.82),
                     fontSize: 12,
+                    shadows: const [
+                      Shadow(color: Color(0xCC101639), blurRadius: 8),
+                    ],
                   ),
                 ),
               ],
@@ -474,9 +478,12 @@ class _AuthField extends StatelessWidget {
           child: Text(
             label,
             style: TextStyle(
-              color: CaliMindColors.foreground,
+              color: Colors.white,
               fontSize: 12,
               fontWeight: FontWeight.w600,
+              shadows: const [
+                Shadow(color: Color(0xCC101639), blurRadius: 8),
+              ],
             ),
           ),
         ),
@@ -487,12 +494,13 @@ class _AuthField extends StatelessWidget {
           autofillHints: autofillHints,
           style: const TextStyle(color: CaliMindColors.foreground),
           decoration: InputDecoration(
-            prefixIcon: Icon(icon, size: 18, color: CaliMindColors.mutedForeground),
+            prefixIcon:
+                Icon(icon, size: 18, color: CaliMindColors.mutedForeground),
             suffixIcon: suffixIcon,
             hintText: hint,
             hintStyle: const TextStyle(color: CaliMindColors.mutedForeground),
             filled: true,
-            fillColor: CaliMindColors.background,
+            fillColor: const Color(0xEFFFFFFF),
             contentPadding: const EdgeInsets.symmetric(
               horizontal: 16,
               vertical: 16,
@@ -507,7 +515,8 @@ class _AuthField extends StatelessWidget {
             ),
             focusedBorder: OutlineInputBorder(
               borderRadius: BorderRadius.circular(15),
-              borderSide: const BorderSide(color: CaliMindColors.primary, width: 1.5),
+              borderSide:
+                  const BorderSide(color: CaliMindColors.primary, width: 1.5),
             ),
           ),
         ),
@@ -530,30 +539,29 @@ class _PrimaryAuthButton extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return ElevatedButton(
-        onPressed: isLoading ? null : onPressed,
-        style: ElevatedButton.styleFrom(
-          minimumSize: const Size.fromHeight(54),
-          backgroundColor: CaliMindColors.primary,
-          shape:
-              RoundedRectangleBorder(borderRadius: BorderRadius.circular(15)),
-        ),
-        child: isLoading
-            ? const SizedBox(
-                width: 21,
-                height: 21,
-                child: CircularProgressIndicator(
-                  color: Colors.white,
-                  strokeWidth: 2,
-                ),
-              )
-            : Text(
-                label,
-                style: const TextStyle(
-                  color: Colors.white,
-                  fontWeight: FontWeight.w700,
-                  fontSize: 15,
-                ),
+      onPressed: isLoading ? null : onPressed,
+      style: ElevatedButton.styleFrom(
+        minimumSize: const Size.fromHeight(54),
+        backgroundColor: CaliMindColors.primary,
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(15)),
+      ),
+      child: isLoading
+          ? const SizedBox(
+              width: 21,
+              height: 21,
+              child: CircularProgressIndicator(
+                color: Colors.white,
+                strokeWidth: 2,
               ),
+            )
+          : Text(
+              label,
+              style: const TextStyle(
+                color: Colors.white,
+                fontWeight: FontWeight.w700,
+                fontSize: 15,
+              ),
+            ),
     );
   }
 }

@@ -6,11 +6,16 @@ import 'package:lucide_icons_flutter/lucide_icons.dart';
 import 'package:calimind/core/constants/app_colors.dart';
 import 'package:calimind/core/constants/app_typography.dart';
 import 'package:calimind/core/services/biometric_service.dart';
+import 'package:calimind/core/services/device_calendar_service.dart';
+import 'package:calimind/core/services/widget_service.dart';
 import 'package:calimind/core/utils/app_feedback.dart';
 import 'package:calimind/data/datasources/audit_remote_datasource.dart';
 import 'package:calimind/domain/models/audit_log.dart';
 import 'package:calimind/presentation/state/auth_provider.dart';
+import 'package:calimind/presentation/state/device_calendar_provider.dart';
 import 'package:calimind/presentation/state/profile_provider.dart';
+import 'package:calimind/presentation/state/schedule_provider.dart';
+import 'package:calimind/presentation/state/task_provider.dart';
 import 'package:calimind/presentation/state/voice_assistant_provider.dart';
 
 class SettingsScreen extends ConsumerStatefulWidget {
@@ -26,18 +31,98 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
   bool _isTestingVoiceService = false;
   bool _biometricEnabled = false;
   bool _isChangingBiometric = false;
+  bool _widgetTitleSharingEnabled = false;
+  bool _isChangingWidgetTitleSharing = false;
   final _biometrics = BiometricService();
 
   @override
   void initState() {
     super.initState();
     _loadBiometricSetting();
+    _loadWidgetSharingSetting();
+  }
+
+  Future<void> _loadWidgetSharingSetting() async {
+    try {
+      final enabled = await WidgetService.isTaskTitleSharingEnabled();
+      if (mounted) setState(() => _widgetTitleSharingEnabled = enabled);
+    } catch (error) {
+      debugPrint('Could not load widget privacy setting: $error');
+      if (mounted) {
+        _showFeedback('Could not load the widget privacy setting.',
+            isError: true);
+      }
+    }
+  }
+
+  Future<void> _setWidgetTitleSharingEnabled(bool enabled) async {
+    setState(() => _isChangingWidgetTitleSharing = true);
+    try {
+      await WidgetService.setTaskTitleSharingEnabled(enabled);
+      if (enabled) {
+        final tasks = ref.read(taskProvider).valueOrNull ?? const [];
+        final scheduledTaskIds = ref
+            .read(scheduleProvider)
+            .slots
+            .map((slot) => slot.taskId);
+        await WidgetService.refresh(
+          tasks,
+          scheduledTaskIds: scheduledTaskIds,
+        );
+      }
+      if (mounted) {
+        setState(() => _widgetTitleSharingEnabled = enabled);
+      }
+    } catch (error) {
+      debugPrint('Could not update widget privacy setting: $error');
+      if (mounted) {
+        _showFeedback('Could not update the home-screen widget setting.',
+            isError: true);
+      }
+    } finally {
+      if (mounted) setState(() => _isChangingWidgetTitleSharing = false);
+    }
   }
 
   Future<void> _loadBiometricSetting() async {
     final enabled = await _biometrics.isEnabled() &&
         await _biometrics.isBiometricsAvailable();
     if (mounted) setState(() => _biometricEnabled = enabled);
+  }
+
+  Future<void> _setCalendarBusyTimesEnabled(bool enabled) async {
+    try {
+      if (!enabled) {
+        await ref.read(deviceCalendarProvider.notifier).disable();
+        return;
+      }
+      final status = await ref.read(deviceCalendarProvider.notifier).enable();
+      if (!mounted || status == DeviceCalendarAccessStatus.granted) return;
+      final message = switch (status) {
+        DeviceCalendarAccessStatus.denied =>
+          'Calendar access was denied. You can enable it in device settings.',
+        DeviceCalendarAccessStatus.restricted =>
+          'Calendar access is restricted on this device.',
+        DeviceCalendarAccessStatus.unsupported =>
+          'Read-only calendar access is unavailable on this platform.',
+        DeviceCalendarAccessStatus.disabled =>
+          'Calendar busy-time planning was not enabled.',
+        DeviceCalendarAccessStatus.notRequested =>
+          'Calendar permission was not requested. Try again.',
+        DeviceCalendarAccessStatus.error =>
+          'Could not enable calendar busy-time planning.',
+        DeviceCalendarAccessStatus.granted => '',
+      };
+      AppFeedback.error(ScaffoldMessenger.of(context), message);
+    } catch (error) {
+      debugPrint('Could not update calendar busy-time setting: $error');
+      if (mounted) {
+        AppFeedback.error(
+          ScaffoldMessenger.of(context),
+          'Could not update calendar busy-time planning.',
+        );
+      }
+    }
   }
 
   Future<void> _setBiometricEnabled(bool enabled) async {
@@ -197,6 +282,7 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
   Widget build(BuildContext context) {
     final profileAsync = ref.watch(profileProvider);
     final auth = ref.watch(authProvider);
+    final calendar = ref.watch(deviceCalendarProvider);
     final profileName = auth.user?.userMetadata?['full_name'] as String? ??
         auth.user?.userMetadata?['name'] as String?;
     final profileSubtitle = profileName?.trim().isNotEmpty == true
@@ -301,8 +387,7 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
                         size: 18,
                         color: CaliMindColors.primary,
                       ),
-                onTap:
-                    _isTestingVoiceService ? null : _testVoiceAssistant,
+                onTap: _isTestingVoiceService ? null : _testVoiceAssistant,
               ),
             ],
           ),
@@ -424,6 +509,56 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
                 trailing: const Icon(LucideIcons.chevronRight,
                     size: 16, color: CaliMindColors.mutedForeground),
                 onTap: () {},
+              ),
+            ],
+          ),
+
+          const SizedBox(height: 24),
+          const _SectionHeader(
+            title: 'Planning integrations',
+            icon: LucideIcons.calendarClock,
+            color: CaliMindColors.primary,
+          ),
+          const SizedBox(height: 10),
+          _SettingsCard(
+            children: [
+              _SettingsTile(
+                icon: LucideIcons.calendarDays,
+                title: 'Use device calendar busy times',
+                subtitle: calendar.isLoading
+                    ? 'Checking calendar permission...'
+                    : !DeviceCalendarService
+                            .supportsReadOnlyCalendarAccess
+                        ? 'Unavailable here: granting calendar access could also allow changes.'
+                    : calendar.enabled
+                        ? 'Only event times are used; event details stay private.'
+                        : 'Off by default. Reads busy times only after you enable it.',
+                trailing: Switch(
+                  value: calendar.enabled,
+                  onChanged: calendar.isLoading ||
+                          !DeviceCalendarService
+                              .supportsReadOnlyCalendarAccess
+                      ? null
+                      : _setCalendarBusyTimesEnabled,
+                  activeThumbColor: CaliMindColors.primary,
+                ),
+              ),
+              _Divider(),
+              _SettingsTile(
+                icon: LucideIcons.layoutDashboard,
+                title: 'Share next task with widgets',
+                subtitle: _isChangingWidgetTitleSharing
+                    ? 'Updating widget privacy...'
+                    : _widgetTitleSharingEnabled
+                        ? 'Shows the next task title on your home screen.'
+                        : 'Off by default. Hides task titles from widgets.',
+                trailing: Switch(
+                  value: _widgetTitleSharingEnabled,
+                  onChanged: _isChangingWidgetTitleSharing
+                      ? null
+                      : _setWidgetTitleSharingEnabled,
+                  activeThumbColor: CaliMindColors.primary,
+                ),
               ),
             ],
           ),

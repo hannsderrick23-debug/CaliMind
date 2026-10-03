@@ -8,8 +8,8 @@ import 'package:intl/intl.dart';
 import 'package:calimind/core/constants/app_colors.dart';
 import 'package:calimind/core/constants/app_typography.dart';
 import 'package:calimind/core/utils/app_feedback.dart';
+import 'package:calimind/core/services/widget_service.dart';
 import 'package:calimind/domain/models/parsed_command.dart';
-import 'package:calimind/domain/models/task.dart';
 import 'package:calimind/presentation/state/role_focus_provider.dart';
 import 'package:calimind/presentation/state/schedule_provider.dart';
 import 'package:calimind/presentation/state/voice_assistant_provider.dart';
@@ -22,7 +22,12 @@ import 'widgets/voice_assistant_fab.dart';
 import '../tasks/widgets/voice_confirm_sheet.dart';
 
 class DashboardScreen extends ConsumerStatefulWidget {
-  const DashboardScreen({super.key});
+  final bool voiceShortcutRequested;
+
+  const DashboardScreen({
+    super.key,
+    this.voiceShortcutRequested = false,
+  });
 
   @override
   ConsumerState<DashboardScreen> createState() => _DashboardScreenState();
@@ -31,6 +36,7 @@ class DashboardScreen extends ConsumerStatefulWidget {
 class _DashboardScreenState extends ConsumerState<DashboardScreen>
     with SingleTickerProviderStateMixin {
   late final TabController _tabController;
+  final _scheduleTabKey = GlobalKey<ScheduleTabState>();
   bool _voiceReviewOpen = false;
 
   @override
@@ -38,6 +44,26 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen>
     super.initState();
     _tabController = TabController(length: 2, vsync: this);
     _tabController.addListener(() => setState(() {}));
+    if (widget.voiceShortcutRequested) _showVoiceShortcutPrompt();
+  }
+
+  @override
+  void didUpdateWidget(DashboardScreen oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (widget.voiceShortcutRequested &&
+        !oldWidget.voiceShortcutRequested) {
+      _showVoiceShortcutPrompt();
+    }
+  }
+
+  void _showVoiceShortcutPrompt() {
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted) return;
+      AppFeedback.info(
+        ScaffoldMessenger.of(context),
+        'Tap the microphone when you are ready to start voice capture.',
+      );
+    });
   }
 
   @override
@@ -124,19 +150,42 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen>
 
   @override
   Widget build(BuildContext context) {
+    ref.listen(taskProvider, (previous, next) {
+      final tasks = next.valueOrNull;
+      if (tasks == null) return;
+      final scheduledTaskIds =
+          ref.read(scheduleProvider).slots.map((slot) => slot.taskId);
+      unawaited(
+        WidgetService.refresh(
+          tasks,
+          scheduledTaskIds: scheduledTaskIds,
+        ),
+      );
+    });
+    ref.listen(scheduleProvider, (previous, next) {
+      if (identical(previous?.slots, next.slots)) return;
+      final tasks = ref.read(taskProvider).valueOrNull;
+      if (tasks == null) return;
+      unawaited(
+        WidgetService.refresh(
+          tasks,
+          scheduledTaskIds: next.slots.map((slot) => slot.taskId),
+        ),
+      );
+    });
+
     // Listen for voice parse completion
     ref.listen(voiceAssistantProvider, (previous, next) {
       if (next.draftTask != null && !_voiceReviewOpen) {
         _presentVoiceReview();
       } else if (next.parsedCommand is GenerateScheduleCommand &&
           previous?.parsedCommand is! GenerateScheduleCommand) {
-        final tasks = ref.read(taskProvider).valueOrNull ?? [];
-        unawaited(_generateScheduleFromVoice(tasks));
+        _generateScheduleFromVoice();
         ref.read(voiceAssistantProvider.notifier).dismiss();
         _tabController.animateTo(1);
         AppFeedback.success(
           ScaffoldMessenger.of(context),
-          'Generating your schedule for the selected day.',
+          'Reviewing your proposed schedule before saving it.',
         );
       } else if (next.errorMessage != null &&
           next.errorMessage != previous?.errorMessage) {
@@ -165,9 +214,9 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen>
           Expanded(
             child: TabBarView(
               controller: _tabController,
-              children: const [
-                TaskListTab(),
-                ScheduleTab(),
+              children: [
+                const TaskListTab(),
+                ScheduleTab(key: _scheduleTabKey),
               ],
             ),
           ),
@@ -177,16 +226,14 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen>
     );
   }
 
-  Future<void> _generateScheduleFromVoice(List<Task> tasks) async {
-    try {
-      await ref.read(scheduleProvider.notifier).generateSchedule(tasks);
-    } catch (error) {
+  void _generateScheduleFromVoice() {
+    WidgetsBinding.instance.addPostFrameCallback((_) {
       if (!mounted) return;
-      AppFeedback.error(
-        ScaffoldMessenger.of(context),
-        'Could not save the schedule: $error',
-      );
-    }
+      final scheduleTab = _scheduleTabKey.currentState;
+      if (scheduleTab != null) {
+        unawaited(scheduleTab.generateFromVoice());
+      }
+    });
   }
 
   PreferredSizeWidget _buildAppBar(String dateLabel) {
@@ -410,8 +457,7 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen>
                     style: CaliMindTypography.bodySmall.copyWith(
                       fontSize: 10,
                       color: color,
-                      fontWeight:
-                          selected ? FontWeight.w700 : FontWeight.w500,
+                      fontWeight: selected ? FontWeight.w700 : FontWeight.w500,
                     ),
                   ),
                 ],
