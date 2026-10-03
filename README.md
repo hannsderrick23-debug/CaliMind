@@ -82,7 +82,7 @@ next step.
 
 CaliMind is developed by **Aventorgo LLC**.
 
-[Visit Aventorgo](https://aventorgo.vercel.app/)
+[![Visit Aventorgo](https://img.shields.io/badge/Visit-Aventorgo%20LLC-641A91?style=for-the-badge)](https://aventorgo.vercel.app/)
 
 ## License
 
