@@ -37,8 +37,16 @@ class _UnlockScreenState extends ConsumerState<UnlockScreen> {
   }
 
   Future<void> _usePassword() async {
-    await ref.read(authProvider.notifier).signOut();
-    if (mounted) context.go('/login');
+    final signedOut = await ref.read(authProvider.notifier).signOut();
+    if (!mounted) return;
+    if (signedOut) {
+      context.go('/login');
+    } else {
+      setState(() {
+        _error = ref.read(authProvider).errorMessage ??
+            'Could not sign out. Please try again.';
+      });
+    }
   }
 
   @override

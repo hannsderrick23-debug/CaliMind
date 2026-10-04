@@ -32,6 +32,42 @@ class AppFeedback {
     );
   }
 
+  static ScaffoldFeatureController<SnackBar, SnackBarClosedReason> undoable(
+    ScaffoldMessengerState messenger,
+    String message, {
+    required VoidCallback onUndo,
+  }) {
+    messenger.hideCurrentSnackBar();
+    return messenger.showSnackBar(
+      SnackBar(
+        behavior: SnackBarBehavior.floating,
+        duration: const Duration(seconds: 6),
+        backgroundColor: CaliMindColors.foreground,
+        content: Row(
+          children: [
+            const Icon(
+              LucideIcons.trash2,
+              size: 18,
+              color: CaliMindColors.warning,
+            ),
+            const SizedBox(width: 10),
+            Expanded(
+              child: Text(
+                message,
+                style: const TextStyle(color: Colors.white),
+              ),
+            ),
+          ],
+        ),
+        action: SnackBarAction(
+          label: 'Undo',
+          textColor: Colors.white,
+          onPressed: onUndo,
+        ),
+      ),
+    );
+  }
+
   static void _show(
     ScaffoldMessengerState messenger,
     String message, {

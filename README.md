@@ -25,13 +25,18 @@ adjust your plan as priorities change.
   confirm it before saving.
 - **Flexible task management** — create, edit, complete, and organize tasks by
   focus category, due date, priority, duration, and recurrence.
+- **Task notes and details** — open a task card to review its details and keep a
+  short note with it.
 - **Daily scheduling** — generate a proposed schedule, review it, and choose
   what to save. Replan remaining tasks while preserving completed work.
 - **Calendar-aware planning** — optionally account for busy calendar intervals
   on supported platforms.
+- **Calendar event handoff** — on Android, open a task as a draft in an installed
+  calendar app and review it before saving.
 - **Focus sessions** — use a built-in timer to give one task your attention.
 - **Progress insights** — review weekly progress and recognize steady effort.
-- **Reminders and notifications** — get prompts about tasks and plans.
+- **Reminders and notifications** — configure device notifications and reminder
+  sounds for tasks and schedule updates.
 - **Secure sign-in** — account access, password recovery, and biometric unlock
   where supported.
 - **Home-screen widgets** — view useful task information on supported devices.

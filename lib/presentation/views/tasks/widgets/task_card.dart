@@ -13,12 +13,14 @@ import 'package:calimind/domain/models/task.dart';
 import 'package:calimind/core/services/widget_service.dart';
 import 'package:calimind/presentation/state/schedule_provider.dart';
 import 'package:calimind/presentation/state/task_provider.dart';
+import 'package:calimind/presentation/views/tasks/task_deletion_action.dart';
 
 class TaskCard extends ConsumerWidget {
   final Task task;
+  final VoidCallback? onOpen;
   final VoidCallback? onEdit;
 
-  const TaskCard({super.key, required this.task, this.onEdit});
+  const TaskCard({super.key, required this.task, this.onOpen, this.onEdit});
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
@@ -29,22 +31,7 @@ class TaskCard extends ConsumerWidget {
       direction: DismissDirection.endToStart,
       onDismissed: (_) async {
         await HapticFeedbackUtils.heavyImpact();
-        final deleted =
-            await ref.read(taskProvider.notifier).deleteTask(task.id);
-        if (deleted) await _refreshWidget(ref);
-        if (context.mounted) {
-          if (deleted) {
-            AppFeedback.success(
-              ScaffoldMessenger.of(context),
-              'Task deleted.',
-            );
-          } else {
-            AppFeedback.error(
-              ScaffoldMessenger.of(context),
-              'Could not delete this task. Please try again.',
-            );
-          }
-        }
+        await deleteTaskWithUndo(context, ref, task);
       },
       background: Container(
         alignment: Alignment.centerRight,
@@ -63,11 +50,16 @@ class TaskCard extends ConsumerWidget {
           borderRadius: BorderRadius.circular(16),
           border: Border.all(color: CaliMindColors.cardBorder),
         ),
-        child: Padding(
-          padding: const EdgeInsets.all(14),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
+        child: Material(
+          color: Colors.transparent,
+          child: InkWell(
+            onTap: onOpen,
+            borderRadius: BorderRadius.circular(16),
+            child: Padding(
+              padding: const EdgeInsets.all(14),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
               Row(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
@@ -122,7 +114,7 @@ class TaskCard extends ConsumerWidget {
                   const SizedBox(width: 10),
                   Expanded(
                     child: InkWell(
-                      onTap: onEdit,
+                      onTap: onOpen,
                       child: Text(
                         task.title,
                         style: CaliMindTypography.bodyMedium.copyWith(
@@ -246,7 +238,8 @@ class TaskCard extends ConsumerWidget {
                       label: 'Delete',
                       icon: LucideIcons.trash2,
                       color: CaliMindColors.destructive,
-                      onPressed: () => _confirmDelete(context, ref),
+                      onPressed: () =>
+                          deleteTaskWithUndo(context, ref, task, confirm: true),
                     ),
                   ),
                 ],
@@ -265,7 +258,9 @@ class TaskCard extends ConsumerWidget {
                   ),
                 ),
               ],
-            ],
+                ],
+              ),
+            ),
           ),
         ),
       ),
@@ -324,42 +319,6 @@ class TaskCard extends ConsumerWidget {
     await Share.share(text, subject: task.title);
   }
 
-  Future<void> _confirmDelete(BuildContext context, WidgetRef ref) async {
-    final confirmed = await showDialog<bool>(
-      context: context,
-      builder: (context) => AlertDialog(
-        title: const Text('Delete task?'),
-        content: Text('“${task.title}” will be removed from your task list.'),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(context, false),
-            child: const Text('Cancel'),
-          ),
-          FilledButton(
-            onPressed: () => Navigator.pop(context, true),
-            child: const Text('Delete'),
-          ),
-        ],
-      ),
-    );
-    if (confirmed == true) {
-      final deleted = await ref.read(taskProvider.notifier).deleteTask(task.id);
-      if (deleted) await _refreshWidget(ref);
-      if (context.mounted) {
-        if (deleted) {
-          AppFeedback.success(
-            ScaffoldMessenger.of(context),
-            'Task deleted.',
-          );
-        } else {
-          AppFeedback.error(
-            ScaffoldMessenger.of(context),
-            'Could not delete this task. Please try again.',
-          );
-        }
-      }
-    }
-  }
 }
 
 class _TaskMeta extends StatelessWidget {

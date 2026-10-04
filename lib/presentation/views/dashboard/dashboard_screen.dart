@@ -23,10 +23,12 @@ import '../tasks/widgets/voice_confirm_sheet.dart';
 
 class DashboardScreen extends ConsumerStatefulWidget {
   final bool voiceShortcutRequested;
+  final int initialTabIndex;
 
   const DashboardScreen({
     super.key,
     this.voiceShortcutRequested = false,
+    this.initialTabIndex = 0,
   });
 
   @override
@@ -42,7 +44,11 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen>
   @override
   void initState() {
     super.initState();
-    _tabController = TabController(length: 2, vsync: this);
+    _tabController = TabController(
+      length: 2,
+      initialIndex: widget.initialTabIndex,
+      vsync: this,
+    );
     _tabController.addListener(() => setState(() {}));
     if (widget.voiceShortcutRequested) _showVoiceShortcutPrompt();
   }
@@ -50,6 +56,10 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen>
   @override
   void didUpdateWidget(DashboardScreen oldWidget) {
     super.didUpdateWidget(oldWidget);
+    if (widget.initialTabIndex != oldWidget.initialTabIndex &&
+        _tabController.index != widget.initialTabIndex) {
+      _tabController.animateTo(widget.initialTabIndex);
+    }
     if (widget.voiceShortcutRequested &&
         !oldWidget.voiceShortcutRequested) {
       _showVoiceShortcutPrompt();

@@ -7,6 +7,8 @@ import 'package:calimind/core/constants/app_colors.dart';
 import 'package:calimind/core/constants/app_typography.dart';
 import 'package:calimind/core/services/biometric_service.dart';
 import 'package:calimind/core/services/device_calendar_service.dart';
+import 'package:calimind/core/services/push_notification_service.dart';
+import 'package:calimind/core/services/task_reminder_service.dart';
 import 'package:calimind/core/services/widget_service.dart';
 import 'package:calimind/core/utils/app_feedback.dart';
 import 'package:calimind/data/datasources/audit_remote_datasource.dart';
@@ -33,13 +35,178 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
   bool _isChangingBiometric = false;
   bool _widgetTitleSharingEnabled = false;
   bool _isChangingWidgetTitleSharing = false;
+  bool _notificationsEnabled = true;
+  bool _notificationSoundEnabled = true;
+  bool _isChangingNotifications = false;
+  bool _isChangingNotificationSound = false;
+  bool _isSigningOut = false;
   final _biometrics = BiometricService();
+  final _reminders = TaskReminderService();
 
   @override
   void initState() {
     super.initState();
     _loadBiometricSetting();
     _loadWidgetSharingSetting();
+    _loadNotificationSettings();
+  }
+
+  Future<void> _loadNotificationSettings() async {
+    try {
+      final enabled = await _reminders.areNotificationsEnabled();
+      final soundEnabled = await _reminders.isSoundEnabled();
+      if (!mounted) return;
+      setState(() {
+        _notificationsEnabled = enabled;
+        _notificationSoundEnabled = soundEnabled;
+      });
+    } catch (error) {
+      debugPrint('Could not load notification preferences: $error');
+      if (mounted) {
+        _showFeedback(
+          'Could not load notification preferences.',
+          isError: true,
+        );
+      }
+    }
+  }
+
+  Future<void> _setNotificationsEnabled(bool enabled) async {
+    setState(() => _isChangingNotifications = true);
+    try {
+      final configureError = await PushNotificationService.instance
+          .configureNotifications(enabled);
+      if (configureError != null) {
+        final currentEnabled = await _reminders.areNotificationsEnabled();
+        if (mounted) {
+          setState(() => _notificationsEnabled = currentEnabled);
+          _showFeedback(configureError, isError: true);
+        }
+        return;
+      }
+      if (!mounted) return;
+
+      if (enabled) {
+        final tasks = ref.read(taskProvider).valueOrNull ?? const [];
+        var failed = 0;
+        for (final task in tasks.where(
+          (task) => !task.completed && task.reminderAt != null,
+        )) {
+          final scheduled = await _reminders.scheduleTaskReminder(
+            taskId: task.id,
+            title: task.title,
+            reminderAt: task.reminderAt!,
+          );
+          if (!scheduled) failed++;
+        }
+        if (failed > 0 && mounted) {
+          _showFeedback(
+            'Notifications are on, but $failed task reminder(s) could not be scheduled.',
+            isError: true,
+          );
+        }
+      }
+
+      if (mounted) {
+        setState(() => _notificationsEnabled = enabled);
+        _showFeedback(
+          enabled ? 'Notifications are on.' : 'Notifications are off.',
+        );
+      }
+    } catch (error) {
+      debugPrint('Could not update notification preferences: $error');
+      if (mounted) {
+        _showFeedback(
+          'Could not update notification preferences. Please try again.',
+          isError: true,
+        );
+      }
+    } finally {
+      if (mounted) setState(() => _isChangingNotifications = false);
+    }
+  }
+
+  Future<void> _setNotificationSoundEnabled(bool enabled) async {
+    setState(() => _isChangingNotificationSound = true);
+    try {
+      await _reminders.setSoundEnabled(enabled);
+      if (!mounted) return;
+      final tasks = ref.read(taskProvider).valueOrNull ?? const [];
+      var failed = 0;
+      for (final task in tasks.where(
+        (task) => !task.completed && task.reminderAt != null,
+      )) {
+        final scheduled = await _reminders.scheduleTaskReminder(
+          taskId: task.id,
+          title: task.title,
+          reminderAt: task.reminderAt!,
+        );
+        if (!scheduled) failed++;
+      }
+      if (mounted) {
+        setState(() => _notificationSoundEnabled = enabled);
+        _showFeedback(
+          failed > 0
+              ? 'Sound preference saved, but $failed reminder(s) could not be updated.'
+              : enabled
+                  ? 'Reminder sounds are on.'
+                  : 'Reminder sounds are off.',
+          isError: failed > 0,
+        );
+      }
+    } catch (error) {
+      debugPrint('Could not update reminder sound preference: $error');
+      if (mounted) {
+        _showFeedback('Could not update the sound setting.', isError: true);
+      }
+    } finally {
+      if (mounted) setState(() => _isChangingNotificationSound = false);
+    }
+  }
+
+  Future<void> _signOut() async {
+    if (_isSigningOut) return;
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (dialogContext) => AlertDialog(
+        title: const Text('Sign out?'),
+        content: const Text('You can sign back in at any time.'),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(dialogContext, false),
+            child: const Text('Cancel'),
+          ),
+          FilledButton(
+            onPressed: () => Navigator.pop(dialogContext, true),
+            child: const Text('Sign out'),
+          ),
+        ],
+      ),
+    );
+    if (confirmed != true || !mounted) return;
+    final messenger = ScaffoldMessenger.of(context);
+    setState(() => _isSigningOut = true);
+    try {
+      final signedOut = await ref.read(authProvider.notifier).signOut();
+      if (!signedOut) {
+        if (mounted) {
+          _showFeedback(
+            ref.read(authProvider).errorMessage ?? 'Could not sign out.',
+            isError: true,
+          );
+        }
+        return;
+      }
+      AppFeedback.success(messenger, 'Signed out.');
+      if (mounted) context.go('/welcome');
+    } catch (error) {
+      debugPrint('Could not sign out: $error');
+      if (mounted) {
+        _showFeedback('Could not sign out. Please try again.', isError: true);
+      }
+    } finally {
+      if (mounted) setState(() => _isSigningOut = false);
+    }
   }
 
   Future<void> _loadWidgetSharingSetting() async {
@@ -61,10 +228,8 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
       await WidgetService.setTaskTitleSharingEnabled(enabled);
       if (enabled) {
         final tasks = ref.read(taskProvider).valueOrNull ?? const [];
-        final scheduledTaskIds = ref
-            .read(scheduleProvider)
-            .slots
-            .map((slot) => slot.taskId);
+        final scheduledTaskIds =
+            ref.read(scheduleProvider).slots.map((slot) => slot.taskId);
         await WidgetService.refresh(
           tasks,
           scheduledTaskIds: scheduledTaskIds,
@@ -321,6 +486,62 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
             ],
           ),
           const SizedBox(height: 24),
+          const _SectionHeader(
+            title: 'Preferences',
+            icon: LucideIcons.slidersHorizontal,
+            color: CaliMindColors.primary,
+          ),
+          const SizedBox(height: 10),
+          _SettingsCard(
+            children: [
+              _SettingsTile(
+                icon: LucideIcons.bell,
+                title: 'Notifications and reminders',
+                subtitle: _isChangingNotifications
+                    ? 'Updating notification settings...'
+                    : _notificationsEnabled
+                        ? 'Task reminders and schedule updates are enabled.'
+                        : 'Task reminders and schedule updates are paused.',
+                trailing: _isChangingNotifications
+                    ? const SizedBox(
+                        width: 18,
+                        height: 18,
+                        child: CircularProgressIndicator(
+                          strokeWidth: 2,
+                          color: CaliMindColors.primary,
+                        ),
+                      )
+                    : Switch(
+                        value: _notificationsEnabled,
+                        onChanged: _setNotificationsEnabled,
+                        activeThumbColor: CaliMindColors.primary,
+                      ),
+              ),
+              _Divider(),
+              _SettingsTile(
+                icon: LucideIcons.volume2,
+                title: 'Local reminder sound',
+                subtitle:
+                    'Control sound for scheduled reminders and in-app alerts.',
+                trailing: Switch(
+                  value: _notificationSoundEnabled,
+                  onChanged:
+                      !_notificationsEnabled || _isChangingNotificationSound
+                          ? null
+                          : _setNotificationSoundEnabled,
+                  activeThumbColor: CaliMindColors.primary,
+                ),
+              ),
+              _Divider(),
+              const _SettingsTile(
+                icon: LucideIcons.alarmClock,
+                title: 'About alarm reminders',
+                subtitle:
+                    'CaliMind schedules notifications, not alarms in your Clock app. Delivery time can depend on device permissions and battery settings.',
+              ),
+            ],
+          ),
+          const SizedBox(height: 24),
           // Voice assistant
           const _SectionHeader(
             title: 'Aventor Voice',
@@ -527,21 +748,27 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
                 title: 'Use device calendar busy times',
                 subtitle: calendar.isLoading
                     ? 'Checking calendar permission...'
-                    : !DeviceCalendarService
-                            .supportsReadOnlyCalendarAccess
+                    : !DeviceCalendarService.supportsReadOnlyCalendarAccess
                         ? 'Unavailable here: granting calendar access could also allow changes.'
-                    : calendar.enabled
-                        ? 'Only event times are used; event details stay private.'
-                        : 'Off by default. Reads busy times only after you enable it.',
+                        : calendar.enabled
+                            ? 'Only event times are used; event details stay private.'
+                            : 'Off by default. Reads busy times only after you enable it.',
                 trailing: Switch(
                   value: calendar.enabled,
                   onChanged: calendar.isLoading ||
-                          !DeviceCalendarService
-                              .supportsReadOnlyCalendarAccess
+                          !DeviceCalendarService.supportsReadOnlyCalendarAccess
                       ? null
                       : _setCalendarBusyTimesEnabled,
                   activeThumbColor: CaliMindColors.primary,
                 ),
+              ),
+              _Divider(),
+              _SettingsTile(
+                icon: LucideIcons.calendarPlus,
+                title: 'Add events to your calendar',
+                subtitle: DeviceCalendarService.supportsEventCreation
+                    ? 'Open your calendar app from a task and review each event before saving.'
+                    : 'Event creation from tasks is currently available on Android.',
               ),
               _Divider(),
               _SettingsTile(
@@ -651,11 +878,7 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
           const SizedBox(height: 24),
           // Sign Out
           GestureDetector(
-            onTap: () async {
-              await ref.read(authProvider.notifier).signOut();
-              if (!context.mounted) return;
-              context.go('/login');
-            },
+            onTap: _isSigningOut ? null : _signOut,
             child: Container(
               width: double.infinity,
               padding: const EdgeInsets.symmetric(vertical: 14),
@@ -668,10 +891,19 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
               child: Row(
                 mainAxisAlignment: MainAxisAlignment.center,
                 children: [
-                  const Icon(LucideIcons.logOut,
-                      color: CaliMindColors.destructive, size: 18),
+                  _isSigningOut
+                      ? const SizedBox(
+                          width: 18,
+                          height: 18,
+                          child: CircularProgressIndicator(
+                            strokeWidth: 2,
+                            color: CaliMindColors.destructive,
+                          ),
+                        )
+                      : const Icon(LucideIcons.logOut,
+                          color: CaliMindColors.destructive, size: 18),
                   const SizedBox(width: 8),
-                  Text('Sign Out',
+                  Text(_isSigningOut ? 'Signing out...' : 'Sign Out',
                       style: CaliMindTypography.bodyMedium.copyWith(
                         color: CaliMindColors.destructive,
                         fontWeight: FontWeight.w600,

@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter/foundation.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
@@ -21,11 +23,13 @@ String taskOperationErrorMessage(Object error) {
 class TaskNotifier extends StateNotifier<AsyncValue<List<Task>>> {
   final TaskRepositoryImpl _repo;
   final TaskReminderService _reminders;
+  final Map<String, Task> _pendingDeletes = {};
   String? _lastOperationError;
 
   String? get lastOperationError => _lastOperationError;
 
-  TaskNotifier(this._repo, this._reminders) : super(const AsyncValue.loading()) {
+  TaskNotifier(this._repo, this._reminders)
+      : super(const AsyncValue.loading()) {
     loadTasks();
   }
 
@@ -33,7 +37,11 @@ class TaskNotifier extends StateNotifier<AsyncValue<List<Task>>> {
     state = const AsyncValue.loading();
     try {
       final tasks = await _repo.getTasks(retentionDays: retentionDays);
-      state = AsyncValue.data(tasks);
+      state = AsyncValue.data(
+        tasks
+            .where((task) => !_pendingDeletes.containsKey(task.id))
+            .toList(),
+      );
     } catch (e, st) {
       state = AsyncValue.error(e, st);
     }
@@ -96,6 +104,52 @@ class TaskNotifier extends StateNotifier<AsyncValue<List<Task>>> {
     return true;
   }
 
+  bool stageTaskDeletion(String id) {
+    final current = state.valueOrNull ?? [];
+    final matches = current.where((candidate) => candidate.id == id);
+    final task = matches.isEmpty ? null : matches.first;
+    if (task == null || _pendingDeletes.containsKey(id)) return false;
+
+    _pendingDeletes[id] = task;
+    state = AsyncValue.data(
+      current.where((candidate) => candidate.id != id).toList(),
+    );
+    return true;
+  }
+
+  bool undoTaskDeletion(String id) {
+    final task = _pendingDeletes.remove(id);
+    if (task == null) return false;
+    final current = state.valueOrNull ?? [];
+    state = AsyncValue.data([task, ...current]);
+    return true;
+  }
+
+  Future<bool> commitTaskDeletion(String id) async {
+    final task = _pendingDeletes.remove(id);
+    if (task == null) return false;
+
+    _lastOperationError = null;
+    try {
+      await _repo.deleteTask(id);
+    } catch (error) {
+      final current = state.valueOrNull ?? [];
+      state = AsyncValue.data([task, ...current]);
+      debugPrint('Could not delete task $id: $error');
+      _lastOperationError = taskOperationErrorMessage(error);
+      return false;
+    }
+
+    try {
+      if (task.reminderAt != null) {
+        await _reminders.cancelTaskReminder(id);
+      }
+    } catch (error) {
+      debugPrint('Could not cancel reminder for deleted task $id: $error');
+    }
+    return true;
+  }
+
   Future<bool> toggleCompletion(String id, bool completed) async {
     _lastOperationError = null;
     late Task updated;
@@ -127,8 +181,8 @@ class TaskNotifier extends StateNotifier<AsyncValue<List<Task>>> {
       try {
         final refreshed = await _repo.getTasks();
         final currentTasks = state.valueOrNull ?? [];
-        final matchingOccurrences = refreshed
-            .where((task) => task.recurrenceSourceId == updated.id);
+        final matchingOccurrences =
+            refreshed.where((task) => task.recurrenceSourceId == updated.id);
         final nextOccurrence =
             matchingOccurrences.isEmpty ? null : matchingOccurrences.first;
         if (nextOccurrence != null &&
@@ -141,9 +195,16 @@ class TaskNotifier extends StateNotifier<AsyncValue<List<Task>>> {
     }
     return true;
   }
+
+  @override
+  void dispose() {
+    _pendingDeletes.clear();
+    super.dispose();
+  }
 }
 
-final taskRepositoryProvider = Provider<TaskRepositoryImpl>((ref) => TaskRepositoryImpl());
+final taskRepositoryProvider =
+    Provider<TaskRepositoryImpl>((ref) => TaskRepositoryImpl());
 
 final taskProvider =
     StateNotifierProvider<TaskNotifier, AsyncValue<List<Task>>>((ref) {

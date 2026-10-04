@@ -1,10 +1,15 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
+import 'package:intl/intl.dart';
 import 'package:lucide_icons_flutter/lucide_icons.dart';
 import 'package:calimind/core/constants/app_colors.dart';
 import 'package:calimind/core/constants/app_typography.dart';
+import 'package:calimind/core/utils/app_feedback.dart';
 import 'package:calimind/presentation/state/auth_provider.dart';
+import 'package:calimind/presentation/state/task_provider.dart';
+import 'package:calimind/presentation/widgets/weekly_progress_widget.dart';
+import 'package:calimind/domain/models/task.dart';
 
 class ProfileScreen extends ConsumerStatefulWidget {
   const ProfileScreen({super.key});
@@ -26,12 +31,26 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
   Future<void> _saveProfile() async {
     final name = _nameController.text.trim();
     if (name.isEmpty) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Enter your name before saving.')),
+      AppFeedback.error(
+        ScaffoldMessenger.of(context),
+        'Enter your name before saving.',
       );
       return;
     }
     await ref.read(authProvider.notifier).updateDisplayName(name);
+    if (!mounted) return;
+    final updatedAuth = ref.read(authProvider);
+    if (updatedAuth.successMessage != null) {
+      AppFeedback.success(
+        ScaffoldMessenger.of(context),
+        updatedAuth.successMessage!,
+      );
+    } else if (updatedAuth.errorMessage != null) {
+      AppFeedback.error(
+        ScaffoldMessenger.of(context),
+        updatedAuth.errorMessage!,
+      );
+    }
   }
 
   Future<void> _signOut() async {
@@ -53,13 +72,25 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
       ),
     );
     if (shouldSignOut != true || !mounted) return;
-    await ref.read(authProvider.notifier).signOut();
+    final messenger = ScaffoldMessenger.of(context);
+    final signedOut = await ref.read(authProvider.notifier).signOut();
+    if (!signedOut) {
+      if (mounted) {
+        AppFeedback.error(
+          ScaffoldMessenger.of(context),
+          ref.read(authProvider).errorMessage ?? 'Could not sign out.',
+        );
+      }
+      return;
+    }
+    AppFeedback.success(messenger, 'Signed out.');
     if (mounted) context.go('/welcome');
   }
 
   @override
   Widget build(BuildContext context) {
     final auth = ref.watch(authProvider);
+    final tasksAsync = ref.watch(taskProvider);
     final user = auth.user;
     final metadataName = user?.userMetadata?['full_name'] as String? ??
         user?.userMetadata?['name'] as String?;
@@ -113,6 +144,33 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
                     user?.email ?? '',
                     style: CaliMindTypography.bodySmall,
                   ),
+                ],
+              ),
+            ),
+            const SizedBox(height: 20),
+            tasksAsync.when(
+              loading: () => const Center(
+                child: CircularProgressIndicator(
+                  color: CaliMindColors.primary,
+                ),
+              ),
+              error: (error, _) => Text(
+                'Activity is unavailable: ${taskOperationErrorMessage(error)}',
+                style: CaliMindTypography.bodySmall.copyWith(
+                  color: CaliMindColors.mutedForeground,
+                ),
+              ),
+              data: (tasks) => Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    'Activity & progress',
+                    style: CaliMindTypography.h3.copyWith(fontSize: 16),
+                  ),
+                  const SizedBox(height: 10),
+                  _ProfileActivityCard(tasks: tasks),
+                  const SizedBox(height: 12),
+                  WeeklyProgressWidget(tasks: tasks),
                 ],
               ),
             ),
@@ -215,6 +273,107 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
     }
     return email == null || email.isEmpty ? 'C' : email[0].toUpperCase();
   }
+}
+
+class _ProfileActivityCard extends StatelessWidget {
+  const _ProfileActivityCard({required this.tasks});
+
+  final List<Task> tasks;
+
+  @override
+  Widget build(BuildContext context) {
+    final completed = tasks.where((task) => task.completed).length;
+    final active = tasks.length - completed;
+    final recent = tasks.where((task) => task.completedAt != null).toList()
+      ..sort((a, b) => b.completedAt!.compareTo(a.completedAt!));
+
+    return Container(
+      padding: const EdgeInsets.all(16),
+      decoration: BoxDecoration(
+        color: CaliMindColors.card,
+        borderRadius: BorderRadius.circular(16),
+        border: Border.all(color: CaliMindColors.cardBorder),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              Expanded(child: _ActivityMetric(label: 'Active', value: active)),
+              Expanded(
+                child: _ActivityMetric(label: 'Completed', value: completed),
+              ),
+              Expanded(child: _ActivityMetric(label: 'Total', value: tasks.length)),
+            ],
+          ),
+          if (recent.isNotEmpty) ...[
+            const SizedBox(height: 18),
+            Text(
+              'Recently completed',
+              style: CaliMindTypography.label.copyWith(
+                fontWeight: FontWeight.w700,
+              ),
+            ),
+            const SizedBox(height: 8),
+            for (final task in recent.take(3))
+              Padding(
+                padding: const EdgeInsets.only(top: 6),
+                child: Row(
+                  children: [
+                    const Icon(
+                      LucideIcons.circleCheck,
+                      size: 15,
+                      color: CaliMindColors.success,
+                    ),
+                    const SizedBox(width: 8),
+                    Expanded(
+                      child: Text(
+                        task.title,
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                        style: CaliMindTypography.bodySmall,
+                      ),
+                    ),
+                    Text(
+                      DateFormat('MMM d').format(task.completedAt!.toLocal()),
+                      style: CaliMindTypography.bodySmall.copyWith(
+                        color: CaliMindColors.mutedForeground,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+          ],
+        ],
+      ),
+    );
+  }
+}
+
+class _ActivityMetric extends StatelessWidget {
+  const _ActivityMetric({required this.label, required this.value});
+
+  final String label;
+  final int value;
+
+  @override
+  Widget build(BuildContext context) => Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text(
+            '$value',
+            style: CaliMindTypography.h2.copyWith(
+              color: CaliMindColors.primary,
+            ),
+          ),
+          Text(
+            label,
+            style: CaliMindTypography.bodySmall.copyWith(
+              color: CaliMindColors.mutedForeground,
+            ),
+          ),
+        ],
+      );
 }
 
 class _ProfileMessage extends StatelessWidget {

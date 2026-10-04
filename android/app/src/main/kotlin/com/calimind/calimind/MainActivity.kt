@@ -3,6 +3,8 @@ package com.calimind.calimind
 import android.Manifest
 import android.os.Build
 import android.content.pm.PackageManager
+import android.content.ActivityNotFoundException
+import android.content.Intent
 import android.database.Cursor
 import android.provider.CalendarContract
 import android.content.ContentUris
@@ -32,6 +34,13 @@ class MainActivity : FlutterFragmentActivity() {
                     "requestReadPermission" -> requestReadPermission(result)
                     "getBusyIntervals" -> getBusyIntervals(call.argument<Number>("startMillis")?.toLong(),
                         call.argument<Number>("endMillis")?.toLong(), result)
+                    "createEvent" -> createCalendarEvent(
+                        call.argument<String>("title"),
+                        call.argument<String>("description"),
+                        call.argument<Number>("startMillis")?.toLong(),
+                        call.argument<Number>("endMillis")?.toLong(),
+                        result
+                    )
                     else -> result.notImplemented()
                 }
             }
@@ -145,6 +154,41 @@ class MainActivity : FlutterFragmentActivity() {
             result.error("calendar_read_failed", "Could not read calendar busy times.", null)
         } finally {
             cursor?.close()
+        }
+    }
+
+    private fun createCalendarEvent(
+        title: String?,
+        description: String?,
+        startMillis: Long?,
+        endMillis: Long?,
+        result: MethodChannel.Result
+    ) {
+        if (title.isNullOrBlank() || startMillis == null || endMillis == null ||
+            endMillis <= startMillis
+        ) {
+            result.error("invalid_event", "A title and valid event time are required.", null)
+            return
+        }
+
+        val intent = Intent(Intent.ACTION_INSERT).apply {
+            data = CalendarContract.Events.CONTENT_URI
+            putExtra(CalendarContract.Events.TITLE, title)
+            putExtra(CalendarContract.Events.DESCRIPTION, description.orEmpty())
+            putExtra(CalendarContract.EXTRA_EVENT_BEGIN_TIME, startMillis)
+            putExtra(CalendarContract.EXTRA_EVENT_END_TIME, endMillis)
+        }
+        try {
+            startActivity(Intent.createChooser(intent, "Add event to calendar"))
+            result.success(true)
+        } catch (exception: ActivityNotFoundException) {
+            result.error(
+                "calendar_app_unavailable",
+                "No calendar app is available on this device.",
+                null
+            )
+        } catch (exception: Exception) {
+            result.error("calendar_event_failed", "Could not open a calendar app.", null)
         }
     }
 }

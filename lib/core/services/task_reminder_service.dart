@@ -1,10 +1,14 @@
 import 'package:flutter_local_notifications/flutter_local_notifications.dart';
 import 'package:flutter_timezone/flutter_timezone.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 import 'package:timezone/data/latest.dart' as timezone_data;
 import 'package:timezone/timezone.dart' as timezone;
 
 class TaskReminderService {
   static const _channelId = 'task_reminders';
+  static const _silentChannelId = 'task_reminders_silent';
+  static const _notificationsEnabledKey = 'notifications_enabled';
+  static const _notificationSoundEnabledKey = 'notification_sound_enabled';
   final FlutterLocalNotificationsPlugin _notifications =
       FlutterLocalNotificationsPlugin();
   Future<void>? _initialization;
@@ -62,29 +66,56 @@ class TaskReminderService {
     return true;
   }
 
+  Future<bool> areNotificationsEnabled() async {
+    final preferences = await SharedPreferences.getInstance();
+    return preferences.getBool(_notificationsEnabledKey) ?? true;
+  }
+
+  Future<void> setNotificationsEnabled(bool enabled) async {
+    final preferences = await SharedPreferences.getInstance();
+    await preferences.setBool(_notificationsEnabledKey, enabled);
+    if (!enabled) {
+      await initialize();
+      await _notifications.cancelAll();
+    }
+  }
+
+  Future<bool> isSoundEnabled() async {
+    final preferences = await SharedPreferences.getInstance();
+    return preferences.getBool(_notificationSoundEnabledKey) ?? true;
+  }
+
+  Future<void> setSoundEnabled(bool enabled) async {
+    final preferences = await SharedPreferences.getInstance();
+    await preferences.setBool(_notificationSoundEnabledKey, enabled);
+  }
+
   Future<bool> scheduleTaskReminder({
     required String taskId,
     required String title,
     required DateTime reminderAt,
   }) async {
+    if (!await areNotificationsEnabled()) return false;
     if (!await requestPermission()) return false;
     if (!reminderAt.isAfter(DateTime.now())) return false;
 
     final date = timezone.TZDateTime.from(reminderAt, timezone.local);
+    final soundEnabled = await isSoundEnabled();
     await _notifications.zonedSchedule(
       _notificationId(taskId),
       'Task reminder',
       title,
       date,
-      const NotificationDetails(
+      NotificationDetails(
         android: AndroidNotificationDetails(
-          _channelId,
+          soundEnabled ? _channelId : _silentChannelId,
           'Task reminders',
           channelDescription: 'Reminders for tasks you scheduled in CaliMind.',
           importance: Importance.high,
           priority: Priority.high,
+          playSound: soundEnabled,
         ),
-        iOS: DarwinNotificationDetails(),
+        iOS: DarwinNotificationDetails(presentSound: soundEnabled),
       ),
       androidScheduleMode: AndroidScheduleMode.inexactAllowWhileIdle,
       uiLocalNotificationDateInterpretation:
@@ -98,20 +129,23 @@ class TaskReminderService {
     required String title,
     required String body,
   }) async {
+    if (!await areNotificationsEnabled()) return;
     await initialize();
+    final soundEnabled = await isSoundEnabled();
     await _notifications.show(
       id,
       title,
       body,
-      const NotificationDetails(
+      NotificationDetails(
         android: AndroidNotificationDetails(
-          _channelId,
+          soundEnabled ? _channelId : _silentChannelId,
           'Task reminders',
           channelDescription: 'Reminders for tasks you scheduled in CaliMind.',
           importance: Importance.high,
           priority: Priority.high,
+          playSound: soundEnabled,
         ),
-        iOS: DarwinNotificationDetails(),
+        iOS: DarwinNotificationDetails(presentSound: soundEnabled),
       ),
     );
   }

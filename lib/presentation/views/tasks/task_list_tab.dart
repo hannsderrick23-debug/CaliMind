@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:go_router/go_router.dart';
 import 'package:flutter_animate/flutter_animate.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:lucide_icons_flutter/lucide_icons.dart';
@@ -72,6 +73,7 @@ class TaskListTab extends ConsumerWidget {
                 const SizedBox(height: 8),
                 ...active.map((t) => TaskCard(
                       task: t,
+                      onOpen: () => context.push('/tasks/${t.id}', extra: t),
                       onEdit: () => showModalBottomSheet(
                         context: context,
                         isScrollControlled: true,
@@ -90,6 +92,7 @@ class TaskListTab extends ConsumerWidget {
                 const SizedBox(height: 8),
                 ...done.map((t) => TaskCard(
                       task: t,
+                      onOpen: () => context.push('/tasks/${t.id}', extra: t),
                       onEdit: () => showModalBottomSheet(
                         context: context,
                         isScrollControlled: true,

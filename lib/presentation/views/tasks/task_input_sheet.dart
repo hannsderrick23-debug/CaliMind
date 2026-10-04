@@ -34,8 +34,35 @@ class _TaskInputSheetState extends ConsumerState<TaskInputSheet> {
   DateTime? _reminderAt;
   TaskRecurrence? _recurrence;
   bool _isSaving = false;
+  bool _allowExit = false;
 
   bool get _isEditing => widget.taskToEdit != null;
+
+  bool get _hasUnsavedChanges {
+    final original = widget.taskToEdit;
+    if (original == null) {
+      return _titleCtrl.text.trim().isNotEmpty ||
+          _descCtrl.text.trim().isNotEmpty ||
+          _deadline != null ||
+          _reminderAt != null ||
+          _specificTime != null ||
+          _preferredTime != null ||
+          _recurrence != null ||
+          _category != TaskCategory.personal ||
+          _duration != 30 ||
+          _priority != 2;
+    }
+    return _titleCtrl.text.trim() != original.title ||
+        _descCtrl.text.trim() != (original.description ?? '') ||
+        _category != original.category ||
+        _duration != original.duration ||
+        _priority != original.priority ||
+        _preferredTime != original.preferredTime ||
+        _specificTime != original.specificTime ||
+        _deadline != original.deadline ||
+        _reminderAt != original.reminderAt ||
+        _recurrence != original.recurrence;
+  }
 
   @override
   void initState() {
@@ -64,7 +91,13 @@ class _TaskInputSheetState extends ConsumerState<TaskInputSheet> {
 
   Future<void> _save() async {
     final title = _titleCtrl.text.trim();
-    if (title.isEmpty) return;
+    if (title.isEmpty) {
+      AppFeedback.error(
+        ScaffoldMessenger.of(context),
+        'Enter a title before saving.',
+      );
+      return;
+    }
 
     setState(() => _isSaving = true);
     await HapticFeedbackUtils.heavyImpact();
@@ -133,7 +166,17 @@ class _TaskInputSheetState extends ConsumerState<TaskInputSheet> {
     if (_reminderAt == null &&
         _isEditing &&
         widget.taskToEdit!.reminderAt != null) {
-      await reminders.cancelTaskReminder(taskId);
+      try {
+        await reminders.cancelTaskReminder(taskId);
+      } catch (error) {
+        debugPrint('Could not cancel reminder for task $taskId: $error');
+        if (mounted) {
+          AppFeedback.info(
+            ScaffoldMessenger.of(context),
+            'Task saved, but its old reminder could not be cancelled.',
+          );
+        }
+      }
     } else if (_reminderAt != null) {
       var scheduled = false;
       try {
@@ -155,12 +198,49 @@ class _TaskInputSheetState extends ConsumerState<TaskInputSheet> {
 
     if (mounted) {
       final messenger = ScaffoldMessenger.of(context);
+      setState(() => _allowExit = true);
+      await WidgetsBinding.instance.endOfFrame;
+      if (!mounted) return;
       Navigator.pop(context);
       AppFeedback.success(
         messenger,
         _isEditing ? 'Task updated.' : 'Task added.',
       );
     }
+  }
+
+  Future<void> _requestClose() async {
+    if (_allowExit || _isSaving) return;
+    if (!_hasUnsavedChanges) {
+      Navigator.pop(context);
+      return;
+    }
+    final discard = await showDialog<bool>(
+      context: context,
+      builder: (dialogContext) => AlertDialog(
+        title: const Text('Discard changes?'),
+        content: const Text('Your unsaved task changes will be lost.'),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(dialogContext, false),
+            child: const Text('Keep editing'),
+          ),
+          FilledButton(
+            onPressed: () => Navigator.pop(dialogContext, true),
+            child: const Text('Discard'),
+          ),
+        ],
+      ),
+    );
+    if (discard != true || !mounted) return;
+    setState(() => _allowExit = true);
+    AppFeedback.info(
+      ScaffoldMessenger.of(context),
+      'Unsaved changes discarded.',
+    );
+    await WidgetsBinding.instance.endOfFrame;
+    if (!mounted) return;
+    Navigator.pop(context);
   }
 
   Future<void> _selectSpecificTime() async {
@@ -234,7 +314,12 @@ class _TaskInputSheetState extends ConsumerState<TaskInputSheet> {
 
   @override
   Widget build(BuildContext context) {
-    return Container(
+    return PopScope(
+      canPop: _allowExit || !_hasUnsavedChanges,
+      onPopInvokedWithResult: (didPop, _) {
+        if (!didPop) _requestClose();
+      },
+      child: Container(
       decoration: const BoxDecoration(
         color: CaliMindColors.card,
         borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
@@ -284,7 +369,7 @@ class _TaskInputSheetState extends ConsumerState<TaskInputSheet> {
                 ),
                 const Spacer(),
                 IconButton(
-                  onPressed: () => Navigator.pop(context),
+                  onPressed: _requestClose,
                   icon: const Icon(LucideIcons.x,
                       color: CaliMindColors.mutedForeground, size: 20),
                 ),
@@ -303,14 +388,14 @@ class _TaskInputSheetState extends ConsumerState<TaskInputSheet> {
             ),
             const SizedBox(height: 16),
 
-            // Description
-            _buildLabel('Description (optional)'),
+            // Keep notes in the existing task description field for backwards compatibility.
+            _buildLabel('Short notes (optional)'),
             const SizedBox(height: 8),
             _buildTextField(
               controller: _descCtrl,
-              hint: 'Add context or notes...',
-              maxLines: 2,
-              maxLength: 1000,
+              hint: 'Write a quick note about this task...',
+              maxLines: 3,
+              maxLength: 300,
             ),
             const SizedBox(height: 18),
 
@@ -434,7 +519,8 @@ class _TaskInputSheetState extends ConsumerState<TaskInputSheet> {
           ],
         ),
       ),
-    ).animate().slideY(begin: 1, duration: 350.ms, curve: Curves.easeOutCubic);
+      ).animate().slideY(begin: 1, duration: 350.ms, curve: Curves.easeOutCubic),
+    );
   }
 
   Widget _buildLabel(String text) => Text(
@@ -488,6 +574,7 @@ class _TaskInputSheetState extends ConsumerState<TaskInputSheet> {
       ),
       child: TextField(
         controller: controller,
+        onChanged: (_) => setState(() {}),
         autofocus: autofocus,
         maxLines: maxLines,
         maxLength: maxLength,

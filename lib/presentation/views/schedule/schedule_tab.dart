@@ -1,11 +1,13 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_animate/flutter_animate.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:go_router/go_router.dart';
 import 'package:lucide_icons_flutter/lucide_icons.dart';
 import 'package:calimind/core/constants/app_colors.dart';
 import 'package:calimind/core/constants/app_typography.dart';
 import 'package:calimind/core/services/device_calendar_service.dart';
 import 'package:calimind/core/services/push_notification_service.dart';
+import 'package:calimind/core/services/task_reminder_service.dart';
 import 'package:calimind/core/services/widget_service.dart';
 import 'package:calimind/core/utils/app_feedback.dart';
 import 'package:calimind/core/utils/date_time_utils.dart';
@@ -16,6 +18,7 @@ import 'package:calimind/domain/use_cases/generate_schedule_use_case.dart';
 import 'package:calimind/presentation/state/device_calendar_provider.dart';
 import 'package:calimind/presentation/state/schedule_provider.dart';
 import 'package:calimind/presentation/state/task_provider.dart';
+import 'package:calimind/presentation/views/tasks/task_deletion_action.dart';
 import '../tasks/task_input_sheet.dart';
 import 'widgets/timeline_view.dart';
 import 'widgets/grid_view.dart';
@@ -102,8 +105,19 @@ class ScheduleTabState extends ConsumerState<ScheduleTab> {
         tasks: tasks,
       );
       if (!mounted) return;
+      AppFeedback.success(
+        ScaffoldMessenger.of(context),
+        replanRemaining ? 'Remaining tasks rescheduled.' : 'Schedule saved.',
+      );
       await ref.read(voiceScheduleSummaryProvider.notifier).announce(reviewed);
-      if (mounted && reviewed.slots.isNotEmpty) {
+      var notificationsEnabled = false;
+      try {
+        notificationsEnabled =
+            await TaskReminderService().areNotificationsEnabled();
+      } catch (error) {
+        debugPrint('Could not read notification preference: $error');
+      }
+      if (mounted && reviewed.slots.isNotEmpty && notificationsEnabled) {
         final pushResult =
             await PushNotificationService.instance.notifyScheduleGenerated(
           scheduleDate: draft.date,
@@ -210,6 +224,18 @@ class ScheduleTabState extends ConsumerState<ScheduleTab> {
               ),
             ),
             const SizedBox(height: 18),
+            OutlinedButton.icon(
+              onPressed: () {
+                Navigator.of(sheetContext).pop();
+                context.push(
+                  '/tasks/${selectedTask.id}',
+                  extra: selectedTask,
+                );
+              },
+              icon: const Icon(LucideIcons.fileText),
+              label: const Text('View task details'),
+            ),
+            const SizedBox(height: 8),
             FilledButton.icon(
               onPressed: () async {
                 Navigator.of(sheetContext).pop();
@@ -286,35 +312,7 @@ class ScheduleTabState extends ConsumerState<ScheduleTab> {
   }
 
   Future<void> _confirmDeleteScheduledTask(Task task) async {
-    final confirmed = await showDialog<bool>(
-      context: context,
-      builder: (dialogContext) => AlertDialog(
-        title: const Text('Delete task?'),
-        content: Text('“${task.title}” will be removed from your tasks.'),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(dialogContext, false),
-            child: const Text('Cancel'),
-          ),
-          FilledButton(
-            onPressed: () => Navigator.pop(dialogContext, true),
-            child: const Text('Delete'),
-          ),
-        ],
-      ),
-    );
-    if (confirmed != true) return;
-    final deleted = await ref.read(taskProvider.notifier).deleteTask(task.id);
-    if (deleted) await _refreshWidget();
-    if (!mounted) return;
-    if (deleted) {
-      AppFeedback.success(ScaffoldMessenger.of(context), 'Task deleted.');
-    } else {
-      AppFeedback.error(
-        ScaffoldMessenger.of(context),
-        'Could not delete this task. Please try again.',
-      );
-    }
+    await deleteTaskWithUndo(context, ref, task, confirm: true);
   }
 
   Future<void> _refreshWidget() => WidgetService.refresh(

@@ -174,8 +174,9 @@ void main() {
     );
     await _pumpAuthAnimations(tester);
 
-    expect(find.text('You’re in.'), findsOneWidget);
+    expect(find.textContaining('Good '), findsOneWidget);
     expect(find.text('Open my planner'), findsOneWidget);
+    expect(find.text('View my schedule'), findsOneWidget);
     expect(find.byType(GlassPanel), findsNothing);
     expect(
       find.byWidgetPredicate(

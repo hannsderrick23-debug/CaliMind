@@ -338,7 +338,7 @@ class AuthNotifier extends StateNotifier<AuthState> {
     }
   }
 
-  Future<void> signOut() async {
+  Future<bool> signOut() async {
     final user = state.user ?? Supabase.instance.client.auth.currentUser;
     final metadataName = user?.userMetadata?['full_name'] as String? ??
         user?.userMetadata?['name'] as String?;
@@ -353,10 +353,16 @@ class AuthNotifier extends StateNotifier<AuthState> {
     await WidgetService.clearPublishedTaskTitle();
     try {
       await Supabase.instance.client.auth.signOut();
+      state = const AuthState(status: AuthStatus.unauthenticated);
+      return true;
     } catch (error) {
       debugPrint('Could not sign out from the remote auth session: $error');
+      state = state.copyWith(
+        isLoading: false,
+        errorMessage: 'Could not sign out. Please try again.',
+      );
+      return false;
     }
-    state = const AuthState(status: AuthStatus.unauthenticated);
   }
 
   Future<bool> biometricUnlock() async {

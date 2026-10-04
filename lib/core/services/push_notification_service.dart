@@ -68,24 +68,47 @@ class PushNotificationService {
     }
   }
 
-  Future<void> unregisterCurrentDevice() async {
-    if (!_firebaseAvailable) return;
+  Future<bool> unregisterCurrentDevice() async {
+    if (!_firebaseAvailable) return true;
     try {
       final token = await FirebaseMessaging.instance.getToken();
-      if (token == null) return;
+      if (token == null) return true;
       await Supabase.instance.client.functions.invoke(
         'push-notifications',
         body: {'action': 'unregister', 'token': token},
       );
+      return true;
     } catch (error) {
       debugPrint('Could not unregister this device for push notifications: $error');
+      return false;
     }
+  }
+
+  Future<String?> configureNotifications(bool enabled) async {
+    if (enabled && !await _localNotifications.requestPermission()) {
+      return 'Allow notifications in device settings to turn reminders on.';
+    }
+    await _localNotifications.setNotificationsEnabled(enabled);
+    if (enabled) {
+      _deviceRegistration = _registerCurrentDevice();
+    } else {
+      if (!await unregisterCurrentDevice()) {
+        return 'Local reminders are off, but cloud notifications could not be disconnected. Try again while online.';
+      }
+    }
+    return null;
   }
 
   Future<PushDeliveryResult> notifyScheduleGenerated({
     required String scheduleDate,
     required int scheduledTaskCount,
   }) async {
+    if (!await _localNotifications.areNotificationsEnabled()) {
+      return const PushDeliveryResult(
+        delivered: false,
+        message: 'Notifications are turned off in Settings.',
+      );
+    }
     if (!_firebaseAvailable) {
       return const PushDeliveryResult(
         delivered: false,
@@ -130,6 +153,7 @@ class PushNotificationService {
   Future<void> _registerCurrentDevice() async {
     if (!_firebaseAvailable) return;
     try {
+      if (!await _localNotifications.areNotificationsEnabled()) return;
       final settings =
           await FirebaseMessaging.instance.requestPermission(alert: true, badge: true, sound: true);
       if (settings.authorizationStatus == AuthorizationStatus.denied) {

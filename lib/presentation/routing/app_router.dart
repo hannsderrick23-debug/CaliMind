@@ -17,6 +17,7 @@ import '../views/splash_screen.dart';
 import '../views/dashboard/dashboard_screen.dart';
 import '../views/profile/profile_screen.dart';
 import '../views/settings/settings_screen.dart';
+import '../views/tasks/task_details_screen.dart';
 
 final appRouterProvider = Provider<GoRouter>((ref) {
   final authState = ValueNotifier(ref.read(authProvider));
@@ -137,6 +138,8 @@ final appRouterProvider = Provider<GoRouter>((ref) {
         builder: (context, state) => DashboardScreen(
           voiceShortcutRequested:
               state.uri.queryParameters['voiceShortcut'] == '1',
+          initialTabIndex:
+              state.uri.queryParameters['tab'] == 'schedule' ? 1 : 0,
         ),
       ),
       GoRoute(
@@ -146,6 +149,12 @@ final appRouterProvider = Provider<GoRouter>((ref) {
       GoRoute(
         path: '/settings',
         builder: (context, state) => const SettingsScreen(),
+      ),
+      GoRoute(
+        path: '/tasks/:taskId',
+        redirect: (context, state) => state.extra is Task ? null : '/dashboard',
+        builder: (context, state) =>
+            TaskDetailsScreen(task: state.extra! as Task),
       ),
       GoRoute(
         path: '/focus',

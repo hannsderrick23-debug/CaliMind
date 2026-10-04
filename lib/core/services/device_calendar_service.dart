@@ -31,8 +31,28 @@ class DeviceCalendarService {
       MethodChannel('com.calimind/device_calendar_read_only');
 
   static bool get supportsReadOnlyCalendarAccess => Platform.isAndroid;
+  static bool get supportsEventCreation => Platform.isAndroid;
 
   DeviceCalendarService();
+
+  Future<bool> openEventEditor({
+    required String title,
+    required String? description,
+    required DateTime start,
+    required DateTime end,
+  }) async {
+    if (!supportsEventCreation) return false;
+    return await _readOnlyCalendarChannel.invokeMethod<bool>(
+          'createEvent',
+          {
+            'title': title,
+            'description': description,
+            'startMillis': start.millisecondsSinceEpoch,
+            'endMillis': end.millisecondsSinceEpoch,
+          },
+        ) ??
+        false;
+  }
 
   Future<bool> isEnabled() async {
     final preferences = await SharedPreferences.getInstance();
