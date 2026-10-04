@@ -13,7 +13,7 @@ jobs:
     name: Build APK and create GitHub release
     runs-on: ubuntu-latest
     env:
-      FLUTTER_VERSION: "3.24.0"
+      FLUTTER_VERSION: "3.47.2"
 
     steps:
       - name: Check out repository

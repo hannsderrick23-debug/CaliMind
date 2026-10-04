@@ -52,8 +52,8 @@ tag is pushed.
 
 ### Requirements
 
-- Flutter SDK 3.24 or later
-- Dart SDK 3.5 or later
+- Flutter SDK 3.35 or later
+- Dart SDK 3.9 or later
 
 ### Start the app
 
