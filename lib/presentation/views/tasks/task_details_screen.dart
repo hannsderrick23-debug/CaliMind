@@ -7,6 +7,7 @@ import 'package:lucide_icons_flutter/lucide_icons.dart';
 import 'package:calimind/core/constants/app_colors.dart';
 import 'package:calimind/core/constants/app_typography.dart';
 import 'package:calimind/core/services/device_calendar_service.dart';
+import 'package:calimind/core/services/phone_clock_alarm_service.dart';
 import 'package:calimind/core/services/widget_service.dart';
 import 'package:calimind/core/utils/app_feedback.dart';
 import 'package:calimind/domain/models/task.dart';
@@ -21,10 +22,13 @@ class TaskDetailsScreen extends ConsumerWidget {
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
-    final current = ref.watch(taskProvider).valueOrNull?.where(
-          (candidate) => candidate.id == task.id,
-        );
-    final currentTask = current == null || current.isEmpty ? task : current.first;
+    final current = ref
+        .watch(taskProvider)
+        .valueOrNull
+        ?.where((candidate) => candidate.id == task.id);
+    final currentTask = current == null || current.isEmpty
+        ? task
+        : current.first;
 
     return Scaffold(
       backgroundColor: CaliMindColors.background,
@@ -59,14 +63,18 @@ class TaskDetailsScreen extends ConsumerWidget {
                 children: [
                   Row(
                     children: [
-                      Icon(currentTask.category.icon,
-                          color: currentTask.category.color),
+                      Icon(
+                        currentTask.category.icon,
+                        color: currentTask.category.color,
+                      ),
                       const SizedBox(width: 10),
-                      Text(currentTask.category.label,
-                          style: CaliMindTypography.label.copyWith(
-                            color: currentTask.category.color,
-                            fontWeight: FontWeight.w700,
-                          )),
+                      Text(
+                        currentTask.category.label,
+                        style: CaliMindTypography.label.copyWith(
+                          color: currentTask.category.color,
+                          fontWeight: FontWeight.w700,
+                        ),
+                      ),
                       const Spacer(),
                       Icon(
                         currentTask.completed
@@ -117,15 +125,17 @@ class TaskDetailsScreen extends ConsumerWidget {
                     _DetailRow(
                       icon: LucideIcons.calendarClock,
                       label: 'Due',
-                      value: DateFormat('EEE, MMM d, h:mm a')
-                          .format(currentTask.deadline!.toLocal()),
+                      value: DateFormat(
+                        'EEE, MMM d, h:mm a',
+                      ).format(currentTask.deadline!.toLocal()),
                     ),
                   if (currentTask.reminderAt != null)
                     _DetailRow(
                       icon: LucideIcons.bell,
                       label: 'Reminder',
-                      value: DateFormat('EEE, MMM d, h:mm a')
-                          .format(currentTask.reminderAt!.toLocal()),
+                      value: DateFormat(
+                        'EEE, MMM d, h:mm a',
+                      ).format(currentTask.reminderAt!.toLocal()),
                     ),
                   if (currentTask.recurrence != null)
                     _DetailRow(
@@ -135,11 +145,13 @@ class TaskDetailsScreen extends ConsumerWidget {
                     ),
                   if (currentTask.description?.trim().isNotEmpty == true) ...[
                     const SizedBox(height: 18),
-                    Text('Notes',
-                        style: CaliMindTypography.label.copyWith(
-                          color: CaliMindColors.mutedForeground,
-                          fontWeight: FontWeight.w700,
-                        )),
+                    Text(
+                      'Notes',
+                      style: CaliMindTypography.label.copyWith(
+                        color: CaliMindColors.mutedForeground,
+                        fontWeight: FontWeight.w700,
+                      ),
+                    ),
                     const SizedBox(height: 8),
                     Text(
                       currentTask.description!,
@@ -165,6 +177,24 @@ class TaskDetailsScreen extends ConsumerWidget {
               icon: const Icon(LucideIcons.calendarPlus),
               label: const Text('Add to phone calendar'),
             ),
+            if (PhoneClockAlarmService.isSupported) ...[
+              const SizedBox(height: 10),
+              OutlinedButton.icon(
+                onPressed: () => _setPhoneClockAlarm(context, currentTask),
+                icon: const Icon(LucideIcons.alarmClock),
+                label: const Text('Set alarm in Clock'),
+              ),
+              Padding(
+                padding: const EdgeInsets.only(top: 8),
+                child: Text(
+                  'Clock alarms use a time, not a task date. Confirm the date or repeat schedule in Clock.',
+                  textAlign: TextAlign.center,
+                  style: CaliMindTypography.bodySmall.copyWith(
+                    color: CaliMindColors.mutedForeground,
+                  ),
+                ),
+              ),
+            ],
             if (!DeviceCalendarService.supportsEventCreation)
               Padding(
                 padding: const EdgeInsets.only(top: 8),
@@ -182,7 +212,8 @@ class TaskDetailsScreen extends ConsumerWidget {
     );
   }
 
-  Future<void> _edit(BuildContext context, Task task) => showModalBottomSheet<void>(
+  Future<void> _edit(BuildContext context, Task task) =>
+      showModalBottomSheet<void>(
         context: context,
         isScrollControlled: true,
         backgroundColor: Colors.transparent,
@@ -191,7 +222,8 @@ class TaskDetailsScreen extends ConsumerWidget {
 
   Future<void> _addToCalendar(BuildContext context, Task task) async {
     final now = DateTime.now();
-    final suggestedDate = task.deadline != null &&
+    final suggestedDate =
+        task.deadline != null &&
             task.deadline!.isAfter(DateTime(now.year, now.month, now.day))
         ? task.deadline!
         : now;
@@ -219,11 +251,17 @@ class TaskDetailsScreen extends ConsumerWidget {
     );
     if (time == null || !context.mounted) return;
 
-    final start =     DateTime(date.year, date.month, date.day, time.hour, time.minute);
+    final start = DateTime(
+      date.year,
+      date.month,
+      date.day,
+      time.hour,
+      time.minute,
+    );
     if (!start.isAfter(DateTime.now())) {
       AppFeedback.error(
-    ScaffoldMessenger.of(context),
-    'Choose a future time for this calendar event.',
+        ScaffoldMessenger.of(context),
+        'Choose a future time for this calendar event.',
       );
       return;
     }
@@ -263,6 +301,79 @@ class TaskDetailsScreen extends ConsumerWidget {
     }
   }
 
+  Future<void> _setPhoneClockAlarm(BuildContext context, Task task) async {
+    final service = PhoneClockAlarmService();
+    try {
+      final enabled = await service.isEnabled();
+      if (!context.mounted) return;
+      if (!enabled) {
+        AppFeedback.info(
+          ScaffoldMessenger.of(context),
+          'Turn on Phone Clock alarms in Settings > Planning integrations first.',
+        );
+        return;
+      }
+
+      final plannedTime =
+          task.reminderAt?.toLocal() ?? task.deadline?.toLocal();
+      var initialTime = plannedTime == null
+          ? const TimeOfDay(hour: 9, minute: 0)
+          : TimeOfDay.fromDateTime(plannedTime);
+      final specificTime = task.specificTime?.split(':');
+      if (plannedTime == null &&
+          specificTime != null &&
+          specificTime.length == 2) {
+        final hour = int.tryParse(specificTime[0]);
+        final minute = int.tryParse(specificTime[1]);
+        if (hour != null &&
+            hour >= 0 &&
+            hour <= 23 &&
+            minute != null &&
+            minute >= 0 &&
+            minute <= 59) {
+          initialTime = TimeOfDay(hour: hour, minute: minute);
+        }
+      }
+      final time = await showTimePicker(
+        context: context,
+        initialTime: initialTime,
+      );
+      if (time == null || !context.mounted) return;
+
+      final opened = await service.openAlarm(
+        hour: time.hour,
+        minute: time.minute,
+        label: task.title,
+      );
+      if (!context.mounted) return;
+      if (opened) {
+        AppFeedback.info(
+          ScaffoldMessenger.of(context),
+          'Clock opened with the alarm time. Review and confirm it in Clock.',
+        );
+      } else {
+        AppFeedback.error(
+          ScaffoldMessenger.of(context),
+          'No compatible Clock app is available on this device.',
+        );
+      }
+    } on PlatformException catch (error) {
+      if (context.mounted) {
+        AppFeedback.error(
+          ScaffoldMessenger.of(context),
+          error.message ?? 'Could not open the Clock app.',
+        );
+      }
+    } catch (error) {
+      if (context.mounted) {
+        AppFeedback.error(
+          ScaffoldMessenger.of(context),
+          'Could not open the Clock app: $error',
+        );
+      }
+    }
+  }
+
   Future<void> _markComplete(
     BuildContext context,
     WidgetRef ref,
@@ -273,8 +384,10 @@ class TaskDetailsScreen extends ConsumerWidget {
     if (changed) {
       await WidgetService.refresh(
         ref.read(taskProvider).valueOrNull ?? const <Task>[],
-        scheduledTaskIds:
-            ref.read(scheduleProvider).slots.map((slot) => slot.taskId),
+        scheduledTaskIds: ref
+            .read(scheduleProvider)
+            .slots
+            .map((slot) => slot.taskId),
       );
     }
     if (!context.mounted) return;
@@ -312,19 +425,17 @@ class _DetailRow extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) => Padding(
-        padding: const EdgeInsets.only(top: 12),
-        child: Row(
-          children: [
-            Icon(icon, size: 16, color: CaliMindColors.mutedForeground),
-            const SizedBox(width: 10),
-            SizedBox(
-              width: 108,
-              child: Text(label, style: CaliMindTypography.bodySmall),
-            ),
-            Expanded(
-              child: Text(value, style: CaliMindTypography.bodyMedium),
-            ),
-          ],
+    padding: const EdgeInsets.only(top: 12),
+    child: Row(
+      children: [
+        Icon(icon, size: 16, color: CaliMindColors.mutedForeground),
+        const SizedBox(width: 10),
+        SizedBox(
+          width: 108,
+          child: Text(label, style: CaliMindTypography.bodySmall),
         ),
-      );
+        Expanded(child: Text(value, style: CaliMindTypography.bodyMedium)),
+      ],
+    ),
+  );
 }

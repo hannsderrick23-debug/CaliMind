@@ -8,6 +8,7 @@ import android.content.Intent
 import android.database.Cursor
 import android.provider.CalendarContract
 import android.content.ContentUris
+import android.provider.AlarmClock
 import io.flutter.embedding.android.FlutterFragmentActivity
 import io.flutter.embedding.engine.FlutterEngine
 import io.flutter.plugin.common.MethodChannel
@@ -15,6 +16,7 @@ import io.flutter.plugin.common.MethodChannel
 class MainActivity : FlutterFragmentActivity() {
     companion object {
         private const val CALENDAR_CHANNEL = "com.calimind/device_calendar_read_only"
+        private const val PHONE_ALARM_CHANNEL = "com.calimind/phone_clock_alarm"
         private const val CALENDAR_PERMISSION_REQUEST = 7428
         private const val CALENDAR_PERMISSION_PREFERENCES = "calendar_read_permission"
         private const val CALENDAR_PERMISSION_ASKED = "asked"
@@ -39,6 +41,18 @@ class MainActivity : FlutterFragmentActivity() {
                         call.argument<String>("description"),
                         call.argument<Number>("startMillis")?.toLong(),
                         call.argument<Number>("endMillis")?.toLong(),
+                        result
+                    )
+                    else -> result.notImplemented()
+                }
+            }
+        MethodChannel(flutterEngine.dartExecutor.binaryMessenger, PHONE_ALARM_CHANNEL)
+            .setMethodCallHandler { call, result ->
+                when (call.method) {
+                    "openAlarm" -> openPhoneAlarm(
+                        call.argument<Number>("hour")?.toInt(),
+                        call.argument<Number>("minute")?.toInt(),
+                        call.argument<String>("label"),
                         result
                     )
                     else -> result.notImplemented()
@@ -189,6 +203,37 @@ class MainActivity : FlutterFragmentActivity() {
             )
         } catch (exception: Exception) {
             result.error("calendar_event_failed", "Could not open a calendar app.", null)
+        }
+    }
+
+    private fun openPhoneAlarm(
+        hour: Int?,
+        minute: Int?,
+        label: String?,
+        result: MethodChannel.Result
+    ) {
+        if (hour == null || hour !in 0..23 || minute == null || minute !in 0..59) {
+            result.error("invalid_alarm_time", "A valid alarm time is required.", null)
+            return
+        }
+
+        val intent = Intent(AlarmClock.ACTION_SET_ALARM).apply {
+            putExtra(AlarmClock.EXTRA_HOUR, hour)
+            putExtra(AlarmClock.EXTRA_MINUTES, minute)
+            putExtra(AlarmClock.EXTRA_MESSAGE, label.orEmpty())
+            putExtra(AlarmClock.EXTRA_SKIP_UI, false)
+        }
+        try {
+            startActivity(intent)
+            result.success(true)
+        } catch (exception: ActivityNotFoundException) {
+            result.error(
+                "clock_app_unavailable",
+                "No clock app is available on this device.",
+                null
+            )
+        } catch (exception: Exception) {
+            result.error("clock_alarm_failed", "Could not open the clock app.", null)
         }
     }
 }

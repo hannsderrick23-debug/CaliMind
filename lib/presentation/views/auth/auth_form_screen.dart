@@ -3,6 +3,7 @@ import 'package:flutter_animate/flutter_animate.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import 'package:lucide_icons_flutter/lucide_icons.dart';
+import 'package:url_launcher/url_launcher.dart';
 import 'package:calimind/core/constants/app_colors.dart';
 import 'package:calimind/core/constants/app_typography.dart';
 import 'package:calimind/core/services/biometric_service.dart';
@@ -27,6 +28,7 @@ class _AuthFormScreenState extends ConsumerState<AuthFormScreen> {
   final _confirmPasswordController = TextEditingController();
   bool _obscurePassword = true;
   bool _obscureConfirmPassword = true;
+  bool _termsAccepted = false;
   bool _biometricEnabled = false;
   bool _biometricAvailable = false;
   String? _rememberedName;
@@ -98,6 +100,10 @@ class _AuthFormScreenState extends ConsumerState<AuthFormScreen> {
   }
 
   Future<void> _submit() async {
+    if (widget.isRegister && !_termsAccepted) {
+      _showMessage('Agree to the Terms and Privacy Policy to create an account.');
+      return;
+    }
     final email = _emailController.text.trim();
     final password = _passwordController.text;
     if (!email.contains('@')) {
@@ -115,7 +121,11 @@ class _AuthFormScreenState extends ConsumerState<AuthFormScreen> {
 
     final notifier = ref.read(authProvider.notifier);
     if (widget.isRegister) {
-      await notifier.signUp(email, password);
+      await notifier.signUp(
+        email,
+        password,
+        termsVersion: '2026-10-04',
+      );
       final auth = ref.read(authProvider);
       if (mounted && auth.errorMessage != null) {
         AppFeedback.error(
@@ -217,6 +227,19 @@ class _AuthFormScreenState extends ConsumerState<AuthFormScreen> {
     AppFeedback.error(ScaffoldMessenger.of(context), message);
   }
 
+  Future<void> _openLegalPage(String path) async {
+    final uri = Uri.https('calimind.iddychesire.me', path);
+    try {
+      final opened = await launchUrl(uri, mode: LaunchMode.externalApplication);
+      if (!opened && mounted) {
+        _showMessage('Could not open the legal page. Try again later.');
+      }
+    } catch (error) {
+      debugPrint('Could not open a CaliMind legal page: $error');
+      if (mounted) _showMessage('Could not open the legal page.');
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     final auth = ref.watch(authProvider);
@@ -304,6 +327,49 @@ class _AuthFormScreenState extends ConsumerState<AuthFormScreen> {
               ),
             ),
           ),
+          const SizedBox(height: 12),
+          Row(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Checkbox(
+                value: _termsAccepted,
+                onChanged: auth.isLoading
+                    ? null
+                    : (value) =>
+                        setState(() => _termsAccepted = value ?? false),
+                activeColor: CaliMindColors.primary,
+                checkColor: Colors.white,
+                side: const BorderSide(color: Colors.white70),
+              ),
+              Expanded(
+                child: Padding(
+                  padding: const EdgeInsets.only(top: 11),
+                  child: Wrap(
+                    crossAxisAlignment: WrapCrossAlignment.center,
+                    children: [
+                      const Text(
+                        'I agree to the ',
+                        style: TextStyle(color: Colors.white, height: 1.5),
+                      ),
+                      _LegalLink(
+                        label: 'Terms',
+                        onPressed: () => _openLegalPage('/terms'),
+                      ),
+                      const Text(
+                        ' and acknowledge the ',
+                        style: TextStyle(color: Colors.white, height: 1.5),
+                      ),
+                      _LegalLink(
+                        label: 'Privacy Policy',
+                        onPressed: () => _openLegalPage('/privacy'),
+                      ),
+                      const Text('.', style: TextStyle(color: Colors.white)),
+                    ],
+                  ),
+                ),
+              ),
+            ],
+          ),
         ],
         if (!widget.isRegister) ...[
           Align(
@@ -346,7 +412,11 @@ class _AuthFormScreenState extends ConsumerState<AuthFormScreen> {
           ),
         ],
         const SizedBox(height: 20),
-        OAuthButtons(isLoading: auth.isLoading, photoStyle: true),
+        OAuthButtons(
+          isLoading: auth.isLoading,
+          photoStyle: true,
+          enabled: !widget.isRegister || _termsAccepted,
+        ),
         const SizedBox(height: 17),
         Wrap(
           alignment: WrapAlignment.center,
@@ -445,6 +515,33 @@ class _AuthFormScreenState extends ConsumerState<AuthFormScreen> {
       ),
     );
   }
+
+}
+
+class _LegalLink extends StatelessWidget {
+  const _LegalLink({required this.label, required this.onPressed});
+
+  final String label;
+  final VoidCallback onPressed;
+
+  @override
+  Widget build(BuildContext context) => TextButton(
+        onPressed: onPressed,
+        style: TextButton.styleFrom(
+          foregroundColor: Colors.white,
+          padding: const EdgeInsets.symmetric(horizontal: 2),
+          minimumSize: const Size(0, 30),
+          tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+        ),
+        child: Text(
+          label,
+          style: const TextStyle(
+            color: Colors.white,
+            decoration: TextDecoration.underline,
+            fontWeight: FontWeight.w700,
+          ),
+        ),
+      );
 }
 
 class _AuthField extends StatelessWidget {

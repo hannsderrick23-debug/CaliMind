@@ -6,7 +6,9 @@ import 'package:lucide_icons_flutter/lucide_icons.dart';
 import 'package:calimind/core/constants/app_colors.dart';
 import 'package:calimind/core/constants/app_typography.dart';
 import 'package:calimind/core/services/biometric_service.dart';
+import 'package:calimind/core/services/aventor_eye_service.dart';
 import 'package:calimind/core/services/device_calendar_service.dart';
+import 'package:calimind/core/services/phone_clock_alarm_service.dart';
 import 'package:calimind/core/services/push_notification_service.dart';
 import 'package:calimind/core/services/task_reminder_service.dart';
 import 'package:calimind/core/services/widget_service.dart';
@@ -39,6 +41,11 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
   bool _notificationSoundEnabled = true;
   bool _isChangingNotifications = false;
   bool _isChangingNotificationSound = false;
+  bool _aventorEyeEnabled = false;
+  bool _isChangingAventorEye = false;
+  bool _phoneClockAlarmEnabled = false;
+  bool _isLoadingPhoneClockAlarm = true;
+  bool _isChangingPhoneClockAlarm = false;
   bool _isSigningOut = false;
   final _biometrics = BiometricService();
   final _reminders = TaskReminderService();
@@ -49,6 +56,85 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
     _loadBiometricSetting();
     _loadWidgetSharingSetting();
     _loadNotificationSettings();
+    _loadAventorEyeSetting();
+    _loadPhoneClockAlarmSetting();
+  }
+
+  Future<void> _loadAventorEyeSetting() async {
+    try {
+      final enabled = await AventorEyeService.instance.isEnabled();
+      if (mounted) setState(() => _aventorEyeEnabled = enabled);
+    } catch (error) {
+      debugPrint('Could not load Aventor Eye preference: $error');
+      if (mounted) {
+        _showFeedback('Could not load Aventor Eye preference.', isError: true);
+      }
+    }
+  }
+
+  Future<void> _setAventorEyeEnabled(bool enabled) async {
+    setState(() => _isChangingAventorEye = true);
+    try {
+      await AventorEyeService.instance.setEnabled(enabled);
+      if (!mounted) return;
+      setState(() => _aventorEyeEnabled = enabled);
+      _showFeedback(
+        enabled
+            ? 'Aventor Eye is on. Schedule snapshots are sent to Groq for insights.'
+            : 'Aventor Eye is off and its locally cached insights were removed.',
+      );
+    } catch (error) {
+      debugPrint('Could not update Aventor Eye preference: $error');
+      if (mounted) {
+        _showFeedback('Could not update Aventor Eye preference.', isError: true);
+      }
+    } finally {
+      if (mounted) setState(() => _isChangingAventorEye = false);
+    }
+  }
+
+  Future<void> _loadPhoneClockAlarmSetting() async {
+    try {
+      final enabled = await PhoneClockAlarmService().isEnabled();
+      if (!mounted) return;
+      setState(() {
+        _phoneClockAlarmEnabled = enabled;
+        _isLoadingPhoneClockAlarm = false;
+      });
+    } catch (error) {
+      debugPrint('Could not load the phone Clock integration setting: $error');
+      if (mounted) {
+        setState(() => _isLoadingPhoneClockAlarm = false);
+        _showFeedback(
+          'Could not load the phone Clock integration setting.',
+          isError: true,
+        );
+      }
+    }
+  }
+
+  Future<void> _setPhoneClockAlarmEnabled(bool enabled) async {
+    setState(() => _isChangingPhoneClockAlarm = true);
+    try {
+      await PhoneClockAlarmService().setEnabled(enabled);
+      if (!mounted) return;
+      setState(() => _phoneClockAlarmEnabled = enabled);
+      _showFeedback(
+        enabled
+            ? 'Phone Clock alarms are connected. You will confirm each alarm in Clock.'
+            : 'Phone Clock alarm integration is off.',
+      );
+    } catch (error) {
+      debugPrint('Could not update the phone Clock integration: $error');
+      if (mounted) {
+        _showFeedback(
+          'Could not update the phone Clock integration.',
+          isError: true,
+        );
+      }
+    } finally {
+      if (mounted) setState(() => _isChangingPhoneClockAlarm = false);
+    }
   }
 
   Future<void> _loadNotificationSettings() async {
@@ -71,6 +157,22 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
     }
   }
 
+  Future<int> _rescheduleTaskReminders() async {
+    final tasks = ref.read(taskProvider).valueOrNull ?? const [];
+    var failed = 0;
+    for (final task in tasks.where(
+      (task) => !task.completed && task.reminderAt != null,
+    )) {
+      final scheduled = await _reminders.scheduleTaskReminder(
+        taskId: task.id,
+        title: task.title,
+        reminderAt: task.reminderAt!,
+      );
+      if (!scheduled) failed++;
+    }
+    return failed;
+  }
+
   Future<void> _setNotificationsEnabled(bool enabled) async {
     setState(() => _isChangingNotifications = true);
     try {
@@ -78,39 +180,34 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
           .configureNotifications(enabled);
       if (configureError != null) {
         final currentEnabled = await _reminders.areNotificationsEnabled();
+        final failed = currentEnabled ? await _rescheduleTaskReminders() : 0;
         if (mounted) {
           setState(() => _notificationsEnabled = currentEnabled);
-          _showFeedback(configureError, isError: true);
+          _showFeedback(
+            failed > 0
+                ? '$configureError $failed local reminder(s) could not be scheduled.'
+                : configureError,
+            isError: failed > 0,
+          );
         }
         return;
       }
       if (!mounted) return;
 
+      var failed = 0;
       if (enabled) {
-        final tasks = ref.read(taskProvider).valueOrNull ?? const [];
-        var failed = 0;
-        for (final task in tasks.where(
-          (task) => !task.completed && task.reminderAt != null,
-        )) {
-          final scheduled = await _reminders.scheduleTaskReminder(
-            taskId: task.id,
-            title: task.title,
-            reminderAt: task.reminderAt!,
-          );
-          if (!scheduled) failed++;
-        }
-        if (failed > 0 && mounted) {
-          _showFeedback(
-            'Notifications are on, but $failed task reminder(s) could not be scheduled.',
-            isError: true,
-          );
-        }
+        failed = await _rescheduleTaskReminders();
       }
 
       if (mounted) {
         setState(() => _notificationsEnabled = enabled);
         _showFeedback(
-          enabled ? 'Notifications are on.' : 'Notifications are off.',
+          failed > 0
+              ? 'Notifications are on, but $failed task reminder(s) could not be scheduled.'
+              : enabled
+              ? 'Notifications are on.'
+              : 'Notifications are off.',
+          isError: failed > 0,
         );
       }
     } catch (error) {
@@ -149,8 +246,8 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
           failed > 0
               ? 'Sound preference saved, but $failed reminder(s) could not be updated.'
               : enabled
-                  ? 'Reminder sounds are on.'
-                  : 'Reminder sounds are off.',
+              ? 'Reminder sounds are on.'
+              : 'Reminder sounds are off.',
           isError: failed > 0,
         );
       }
@@ -216,8 +313,10 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
     } catch (error) {
       debugPrint('Could not load widget privacy setting: $error');
       if (mounted) {
-        _showFeedback('Could not load the widget privacy setting.',
-            isError: true);
+        _showFeedback(
+          'Could not load the widget privacy setting.',
+          isError: true,
+        );
       }
     }
   }
@@ -228,12 +327,11 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
       await WidgetService.setTaskTitleSharingEnabled(enabled);
       if (enabled) {
         final tasks = ref.read(taskProvider).valueOrNull ?? const [];
-        final scheduledTaskIds =
-            ref.read(scheduleProvider).slots.map((slot) => slot.taskId);
-        await WidgetService.refresh(
-          tasks,
-          scheduledTaskIds: scheduledTaskIds,
-        );
+        final scheduledTaskIds = ref
+            .read(scheduleProvider)
+            .slots
+            .map((slot) => slot.taskId);
+        await WidgetService.refresh(tasks, scheduledTaskIds: scheduledTaskIds);
       }
       if (mounted) {
         setState(() => _widgetTitleSharingEnabled = enabled);
@@ -241,8 +339,10 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
     } catch (error) {
       debugPrint('Could not update widget privacy setting: $error');
       if (mounted) {
-        _showFeedback('Could not update the home-screen widget setting.',
-            isError: true);
+        _showFeedback(
+          'Could not update the home-screen widget setting.',
+          isError: true,
+        );
       }
     } finally {
       if (mounted) setState(() => _isChangingWidgetTitleSharing = false);
@@ -250,7 +350,8 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
   }
 
   Future<void> _loadBiometricSetting() async {
-    final enabled = await _biometrics.isEnabled() &&
+    final enabled =
+        await _biometrics.isEnabled() &&
         await _biometrics.isBiometricsAvailable();
     if (mounted) setState(() => _biometricEnabled = enabled);
   }
@@ -306,8 +407,10 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
 
         final email = ref.read(authProvider).user?.email;
         if (email == null || email.isEmpty) {
-          _showFeedback('Sign in with an email and password to set this up.',
-              isError: true);
+          _showFeedback(
+            'Sign in with an email and password to set this up.',
+            isError: true,
+          );
           return;
         }
         final password = await _requestPassword();
@@ -317,8 +420,10 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
             .read(authProvider.notifier)
             .verifyPasswordForBiometricSetup(email, password);
         if (!passwordVerified) {
-          _showFeedback('That password could not be verified. Try again.',
-              isError: true);
+          _showFeedback(
+            'That password could not be verified. Try again.',
+            isError: true,
+          );
           return;
         }
 
@@ -327,8 +432,10 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
               'Confirm your identity to enable fingerprint sign-in',
         );
         if (!verified) {
-          _showFeedback('Biometric verification was not completed.',
-              isError: true);
+          _showFeedback(
+            'Biometric verification was not completed.',
+            isError: true,
+          );
           return;
         }
         await _biometrics.saveLoginCredentials(email, password);
@@ -345,8 +452,10 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
     } catch (error) {
       debugPrint('Could not update biometric sign-in: $error');
       if (mounted) {
-        _showFeedback('Could not update biometric sign-in. Please try again.',
-            isError: true);
+        _showFeedback(
+          'Could not update biometric sign-in. Please try again.',
+          isError: true,
+        );
       }
     } finally {
       if (mounted) setState(() => _isChangingBiometric = false);
@@ -417,8 +526,9 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
       final success = result != null;
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
-          backgroundColor:
-              success ? CaliMindColors.success : CaliMindColors.destructive,
+          backgroundColor: success
+              ? CaliMindColors.success
+              : CaliMindColors.destructive,
           content: Row(
             children: [
               Icon(
@@ -432,8 +542,9 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
                   success
                       ? 'Aventor Voice is ready.'
                       : 'Aventor Voice could not complete the test. Please try again.',
-                  style: CaliMindTypography.bodySmall
-                      .copyWith(color: Colors.white),
+                  style: CaliMindTypography.bodySmall.copyWith(
+                    color: Colors.white,
+                  ),
                 ),
               ),
             ],
@@ -448,7 +559,8 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
     final profileAsync = ref.watch(profileProvider);
     final auth = ref.watch(authProvider);
     final calendar = ref.watch(deviceCalendarProvider);
-    final profileName = auth.user?.userMetadata?['full_name'] as String? ??
+    final profileName =
+        auth.user?.userMetadata?['full_name'] as String? ??
         auth.user?.userMetadata?['name'] as String?;
     final profileSubtitle = profileName?.trim().isNotEmpty == true
         ? profileName!.trim()
@@ -460,12 +572,16 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
         backgroundColor: CaliMindColors.background,
         elevation: 0,
         leading: IconButton(
-          icon: const Icon(LucideIcons.arrowLeft,
-              color: CaliMindColors.foreground),
+          icon: const Icon(
+            LucideIcons.arrowLeft,
+            color: CaliMindColors.foreground,
+          ),
           onPressed: () => Navigator.pop(context),
         ),
-        title: Text('Settings',
-            style: CaliMindTypography.h2.copyWith(fontSize: 20)),
+        title: Text(
+          'Settings',
+          style: CaliMindTypography.h2.copyWith(fontSize: 20),
+        ),
       ),
       body: ListView(
         padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 16),
@@ -500,8 +616,10 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
                 subtitle: _isChangingNotifications
                     ? 'Updating notification settings...'
                     : _notificationsEnabled
-                        ? 'Task reminders and schedule updates are enabled.'
-                        : 'Task reminders and schedule updates are paused.',
+                    ? PushNotificationService.instance.isFirebaseAvailable
+                          ? 'Task reminders and schedule updates are enabled.'
+                          : 'Local reminders are enabled; cloud push needs Android Firebase configuration.'
+                    : 'Task reminders and schedule updates are paused.',
                 trailing: _isChangingNotifications
                     ? const SizedBox(
                         width: 18,
@@ -519,6 +637,30 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
               ),
               _Divider(),
               _SettingsTile(
+                icon: LucideIcons.eye,
+                title: 'Aventor Eye insights',
+                subtitle: _isChangingAventorEye
+                    ? 'Updating Aventor Eye...'
+                    : _aventorEyeEnabled
+                        ? 'On. Relevant task titles and timing are sent to Groq for schedule suggestions. Cached insights stay on this device.'
+                        : 'Off by default. Turn on to request gentle schedule insights from Groq.',
+                trailing: _isChangingAventorEye
+                    ? const SizedBox(
+                        width: 18,
+                        height: 18,
+                        child: CircularProgressIndicator(
+                          strokeWidth: 2,
+                          color: CaliMindColors.primary,
+                        ),
+                      )
+                    : Switch(
+                        value: _aventorEyeEnabled,
+                        onChanged: _setAventorEyeEnabled,
+                        activeThumbColor: CaliMindColors.primary,
+                      ),
+              ),
+              _Divider(),
+              _SettingsTile(
                 icon: LucideIcons.volume2,
                 title: 'Local reminder sound',
                 subtitle:
@@ -527,8 +669,8 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
                   value: _notificationSoundEnabled,
                   onChanged:
                       !_notificationsEnabled || _isChangingNotificationSound
-                          ? null
-                          : _setNotificationSoundEnabled,
+                      ? null
+                      : _setNotificationSoundEnabled,
                   activeThumbColor: CaliMindColors.primary,
                 ),
               ),
@@ -537,7 +679,7 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
                 icon: LucideIcons.alarmClock,
                 title: 'About alarm reminders',
                 subtitle:
-                    'CaliMind schedules notifications, not alarms in your Clock app. Delivery time can depend on device permissions and battery settings.',
+                    'Task reminders are notifications. Phone Clock alarms are a separate, optional integration.',
               ),
             ],
           ),
@@ -561,8 +703,11 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
                         color: CaliMindColors.primary,
                         borderRadius: BorderRadius.circular(12),
                       ),
-                      child: const Icon(LucideIcons.mic,
-                          color: Colors.white, size: 20),
+                      child: const Icon(
+                        LucideIcons.mic,
+                        color: Colors.white,
+                        size: 20,
+                      ),
                     ),
                     const SizedBox(width: 14),
                     Expanded(
@@ -571,9 +716,12 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
                         children: [
                           Row(
                             children: [
-                              Text('Aventor Voice',
-                                  style: CaliMindTypography.bodyMedium
-                                      .copyWith(fontWeight: FontWeight.w600)),
+                              Text(
+                                'Aventor Voice',
+                                style: CaliMindTypography.bodyMedium.copyWith(
+                                  fontWeight: FontWeight.w600,
+                                ),
+                              ),
                             ],
                           ),
                           const SizedBox(height: 2),
@@ -633,8 +781,11 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
                         color: CaliMindColors.success.withValues(alpha: 0.15),
                         borderRadius: BorderRadius.circular(12),
                       ),
-                      child: const Icon(LucideIcons.server,
-                          color: CaliMindColors.success, size: 20),
+                      child: const Icon(
+                        LucideIcons.server,
+                        color: CaliMindColors.success,
+                        size: 20,
+                      ),
                     ),
                     const SizedBox(width: 14),
                     Expanded(
@@ -643,16 +794,22 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
                         children: [
                           Row(
                             children: [
-                              Text('Account protection',
-                                  style: CaliMindTypography.bodyMedium
-                                      .copyWith(fontWeight: FontWeight.w600)),
+                              Text(
+                                'Account protection',
+                                style: CaliMindTypography.bodyMedium.copyWith(
+                                  fontWeight: FontWeight.w600,
+                                ),
+                              ),
                               const SizedBox(width: 8),
                               Container(
                                 padding: const EdgeInsets.symmetric(
-                                    horizontal: 6, vertical: 2),
+                                  horizontal: 6,
+                                  vertical: 2,
+                                ),
                                 decoration: BoxDecoration(
-                                  color: CaliMindColors.success
-                                      .withValues(alpha: 0.15),
+                                  color: CaliMindColors.success.withValues(
+                                    alpha: 0.15,
+                                  ),
                                   borderRadius: BorderRadius.circular(6),
                                 ),
                                 child: Text(
@@ -727,8 +884,11 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
                 icon: LucideIcons.shield,
                 title: 'Two-Factor Authentication',
                 subtitle: 'TOTP-based MFA',
-                trailing: const Icon(LucideIcons.chevronRight,
-                    size: 16, color: CaliMindColors.mutedForeground),
+                trailing: const Icon(
+                  LucideIcons.chevronRight,
+                  size: 16,
+                  color: CaliMindColors.mutedForeground,
+                ),
                 onTap: () {},
               ),
             ],
@@ -745,17 +905,18 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
             children: [
               _SettingsTile(
                 icon: LucideIcons.calendarDays,
-                title: 'Use device calendar busy times',
+                title: 'Use calendars synced to this phone',
                 subtitle: calendar.isLoading
                     ? 'Checking calendar permission...'
                     : !DeviceCalendarService.supportsReadOnlyCalendarAccess
-                        ? 'Unavailable here: granting calendar access could also allow changes.'
-                        : calendar.enabled
-                            ? 'Only event times are used; event details stay private.'
-                            : 'Off by default. Reads busy times only after you enable it.',
+                    ? 'Unavailable here: granting calendar access could also allow changes.'
+                    : calendar.enabled
+                    ? 'Includes synced Google calendars. Busy times help planning; event details stay private.'
+                    : 'Connect calendars already synced on this phone, including Google Calendar. Busy times are read only after you enable this.',
                 trailing: Switch(
                   value: calendar.enabled,
-                  onChanged: calendar.isLoading ||
+                  onChanged:
+                      calendar.isLoading ||
                           !DeviceCalendarService.supportsReadOnlyCalendarAccess
                       ? null
                       : _setCalendarBusyTimesEnabled,
@@ -767,8 +928,41 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
                 icon: LucideIcons.calendarPlus,
                 title: 'Add events to your calendar',
                 subtitle: DeviceCalendarService.supportsEventCreation
-                    ? 'Open your calendar app from a task and review each event before saving.'
+                    ? 'Choose a synced calendar from a task, review the event, and save it yourself.'
                     : 'Event creation from tasks is currently available on Android.',
+              ),
+              _Divider(),
+              _SettingsTile(
+                icon: LucideIcons.alarmClock,
+                title: 'Phone Clock alarms',
+                subtitle:
+                    _isLoadingPhoneClockAlarm || _isChangingPhoneClockAlarm
+                    ? 'Updating Clock integration...'
+                    : !PhoneClockAlarmService.isSupported
+                    ? 'Available on Android. Local notification reminders remain separate.'
+                    : _phoneClockAlarmEnabled
+                    ? 'From a task, open Clock with its time prefilled and confirm the alarm there.'
+                    : 'Off by default. Allow CaliMind to prepare alarms in Clock from task details.',
+                trailing:
+                    _isLoadingPhoneClockAlarm || _isChangingPhoneClockAlarm
+                    ? const SizedBox(
+                        width: 18,
+                        height: 18,
+                        child: CircularProgressIndicator(
+                          strokeWidth: 2,
+                          color: CaliMindColors.primary,
+                        ),
+                      )
+                    : Switch(
+                        value: _phoneClockAlarmEnabled,
+                        onChanged:
+                            PhoneClockAlarmService.isSupported &&
+                                !_isLoadingPhoneClockAlarm &&
+                                !_isChangingPhoneClockAlarm
+                            ? _setPhoneClockAlarmEnabled
+                            : null,
+                        activeThumbColor: CaliMindColors.primary,
+                      ),
               ),
               _Divider(),
               _SettingsTile(
@@ -777,8 +971,8 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
                 subtitle: _isChangingWidgetTitleSharing
                     ? 'Updating widget privacy...'
                     : _widgetTitleSharingEnabled
-                        ? 'Shows the next task title on your home screen.'
-                        : 'Off by default. Hides task titles from widgets.',
+                    ? 'Shows the next task title on your home screen.'
+                    : 'Off by default. Hides task titles from widgets.',
                 trailing: Switch(
                   value: _widgetTitleSharingEnabled,
                   onChanged: _isChangingWidgetTitleSharing
@@ -804,7 +998,9 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
                 loading: () => const Padding(
                   padding: EdgeInsets.all(16),
                   child: CircularProgressIndicator(
-                      color: CaliMindColors.primary, strokeWidth: 2),
+                    color: CaliMindColors.primary,
+                    strokeWidth: 2,
+                  ),
                 ),
                 error: (_, __) => const SizedBox.shrink(),
                 data: (profile) => Column(
@@ -863,8 +1059,11 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
                 icon: LucideIcons.history,
                 title: 'View Immutable Audit Log',
                 subtitle: 'Recent sign-ins, deletes, and task modifications',
-                trailing: const Icon(LucideIcons.chevronRight,
-                    size: 16, color: CaliMindColors.mutedForeground),
+                trailing: const Icon(
+                  LucideIcons.chevronRight,
+                  size: 16,
+                  color: CaliMindColors.mutedForeground,
+                ),
                 onTap: () async {
                   await _loadAuditLogs();
                   if (mounted && _auditLogs != null) {
@@ -886,7 +1085,8 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
                 color: CaliMindColors.destructive.withValues(alpha: 0.1),
                 borderRadius: BorderRadius.circular(14),
                 border: Border.all(
-                    color: CaliMindColors.destructive.withValues(alpha: 0.3)),
+                  color: CaliMindColors.destructive.withValues(alpha: 0.3),
+                ),
               ),
               child: Row(
                 mainAxisAlignment: MainAxisAlignment.center,
@@ -900,14 +1100,19 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
                             color: CaliMindColors.destructive,
                           ),
                         )
-                      : const Icon(LucideIcons.logOut,
-                          color: CaliMindColors.destructive, size: 18),
+                      : const Icon(
+                          LucideIcons.logOut,
+                          color: CaliMindColors.destructive,
+                          size: 18,
+                        ),
                   const SizedBox(width: 8),
-                  Text(_isSigningOut ? 'Signing out...' : 'Sign Out',
-                      style: CaliMindTypography.bodyMedium.copyWith(
-                        color: CaliMindColors.destructive,
-                        fontWeight: FontWeight.w600,
-                      )),
+                  Text(
+                    _isSigningOut ? 'Signing out...' : 'Sign Out',
+                    style: CaliMindTypography.bodyMedium.copyWith(
+                      color: CaliMindColors.destructive,
+                      fontWeight: FontWeight.w600,
+                    ),
+                  ),
                 ],
               ),
             ),
@@ -923,7 +1128,8 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
       context: context,
       backgroundColor: CaliMindColors.card,
       shape: const RoundedRectangleBorder(
-          borderRadius: BorderRadius.vertical(top: Radius.circular(24))),
+        borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
+      ),
       builder: (_) => _AuditLogSheet(logs: _auditLogs ?? []),
     );
   }
@@ -934,8 +1140,11 @@ class _SectionHeader extends StatelessWidget {
   final IconData icon;
   final Color color;
 
-  const _SectionHeader(
-      {required this.title, required this.icon, required this.color});
+  const _SectionHeader({
+    required this.title,
+    required this.icon,
+    required this.color,
+  });
 
   @override
   Widget build(BuildContext context) {
@@ -943,9 +1152,13 @@ class _SectionHeader extends StatelessWidget {
       children: [
         Icon(icon, size: 14, color: color),
         const SizedBox(width: 8),
-        Text(title,
-            style: CaliMindTypography.label
-                .copyWith(fontWeight: FontWeight.w700, color: color)),
+        Text(
+          title,
+          style: CaliMindTypography.label.copyWith(
+            fontWeight: FontWeight.w700,
+            color: color,
+          ),
+        ),
       ],
     );
   }
@@ -999,9 +1212,12 @@ class _SettingsTile extends StatelessWidget {
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  Text(title,
-                      style: CaliMindTypography.bodyMedium
-                          .copyWith(fontWeight: FontWeight.w500)),
+                  Text(
+                    title,
+                    style: CaliMindTypography.bodyMedium.copyWith(
+                      fontWeight: FontWeight.w500,
+                    ),
+                  ),
                   Text(subtitle, style: CaliMindTypography.bodySmall),
                 ],
               ),
@@ -1032,18 +1248,23 @@ class _AuditLogSheet extends StatelessWidget {
       children: [
         const SizedBox(height: 12),
         Container(
-            width: 40,
-            height: 4,
-            decoration: BoxDecoration(
-                color: CaliMindColors.cardBorder,
-                borderRadius: BorderRadius.circular(2))),
+          width: 40,
+          height: 4,
+          decoration: BoxDecoration(
+            color: CaliMindColors.cardBorder,
+            borderRadius: BorderRadius.circular(2),
+          ),
+        ),
         const SizedBox(height: 16),
         Padding(
           padding: const EdgeInsets.symmetric(horizontal: 20),
           child: Row(
             children: [
-              const Icon(LucideIcons.history,
-                  size: 18, color: CaliMindColors.primary),
+              const Icon(
+                LucideIcons.history,
+                size: 18,
+                color: CaliMindColors.primary,
+              ),
               const SizedBox(width: 10),
               Text('Security Audit Log', style: CaliMindTypography.h3),
             ],
@@ -1054,16 +1275,22 @@ class _AuditLogSheet extends StatelessWidget {
           child: logs.isEmpty
               ? Padding(
                   padding: const EdgeInsets.all(32),
-                  child: Text('No activity recorded yet.',
-                      style: CaliMindTypography.label),
+                  child: Text(
+                    'No activity recorded yet.',
+                    style: CaliMindTypography.label,
+                  ),
                 )
               : ListView.separated(
                   shrinkWrap: true,
-                  padding:
-                      const EdgeInsets.symmetric(horizontal: 20, vertical: 8),
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 20,
+                    vertical: 8,
+                  ),
                   itemCount: logs.length,
                   separatorBuilder: (_, __) => const Divider(
-                      color: CaliMindColors.cardBorder, height: 1),
+                    color: CaliMindColors.cardBorder,
+                    height: 1,
+                  ),
                   itemBuilder: (ctx, i) {
                     final log = logs[i];
                     return Padding(
@@ -1072,18 +1299,23 @@ class _AuditLogSheet extends StatelessWidget {
                         children: [
                           Container(
                             padding: const EdgeInsets.symmetric(
-                                horizontal: 8, vertical: 3),
+                              horizontal: 8,
+                              vertical: 3,
+                            ),
                             decoration: BoxDecoration(
-                              color:
-                                  CaliMindColors.primary.withValues(alpha: 0.1),
+                              color: CaliMindColors.primary.withValues(
+                                alpha: 0.1,
+                              ),
                               borderRadius: BorderRadius.circular(6),
                             ),
-                            child: Text(log.actionType,
-                                style: CaliMindTypography.bodySmall.copyWith(
-                                  fontSize: 10,
-                                  fontWeight: FontWeight.w700,
-                                  color: CaliMindColors.primary,
-                                )),
+                            child: Text(
+                              log.actionType,
+                              style: CaliMindTypography.bodySmall.copyWith(
+                                fontSize: 10,
+                                fontWeight: FontWeight.w700,
+                                color: CaliMindColors.primary,
+                              ),
+                            ),
                           ),
                           const SizedBox(width: 12),
                           Expanded(
@@ -1093,9 +1325,12 @@ class _AuditLogSheet extends StatelessWidget {
                             ),
                           ),
                           if (log.ipAddressRedacted != null)
-                            Text(log.ipAddressRedacted!,
-                                style: CaliMindTypography.bodySmall.copyWith(
-                                    color: CaliMindColors.mutedForeground)),
+                            Text(
+                              log.ipAddressRedacted!,
+                              style: CaliMindTypography.bodySmall.copyWith(
+                                color: CaliMindColors.mutedForeground,
+                              ),
+                            ),
                         ],
                       ),
                     );

@@ -210,13 +210,21 @@ class AuthNotifier extends StateNotifier<AuthState> {
     state = state.copyWith(biometricSetupPending: false, clearError: true);
   }
 
-  Future<void> signUp(String email, String password) async {
+  Future<void> signUp(
+    String email,
+    String password, {
+    required String termsVersion,
+  }) async {
     state =
         state.copyWith(isLoading: true, clearError: true, clearSuccess: true);
     try {
       final res = await Supabase.instance.client.auth.signUp(
         email: email,
         password: password,
+        data: {
+          'terms_accepted_at': DateTime.now().toUtc().toIso8601String(),
+          'terms_version': termsVersion,
+        },
       );
       if (res.session != null && res.user != null) {
         state = AuthState(status: AuthStatus.authenticated, user: res.user);

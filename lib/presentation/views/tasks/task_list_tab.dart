@@ -7,8 +7,10 @@ import 'package:calimind/core/constants/app_colors.dart';
 import 'package:calimind/core/constants/app_typography.dart';
 import 'package:calimind/domain/models/task.dart';
 import 'package:calimind/presentation/state/role_focus_provider.dart';
+import 'package:calimind/presentation/state/schedule_provider.dart';
 import 'package:calimind/presentation/state/task_provider.dart';
 import 'package:calimind/presentation/widgets/weekly_progress_widget.dart';
+import 'package:calimind/presentation/widgets/aventor_eye_feed.dart';
 import 'task_input_sheet.dart';
 import 'widgets/task_card.dart';
 
@@ -19,6 +21,7 @@ class TaskListTab extends ConsumerWidget {
   Widget build(BuildContext context, WidgetRef ref) {
     final tasksAsync = ref.watch(taskProvider);
     final focus = ref.watch(roleFocusProvider);
+    final schedule = ref.watch(scheduleProvider);
 
     return tasksAsync.when(
       loading: () => const Center(
@@ -62,6 +65,12 @@ class TaskListTab extends ConsumerWidget {
                 ),
               ),
               const SizedBox(height: 16),
+              AventorEyeFeed(
+                tasks: allTasks,
+                slots: schedule.slots,
+                date: schedule.activeDate,
+              ),
+              const SizedBox(height: 12),
               WeeklyProgressWidget(tasks: allTasks),
               const SizedBox(height: 16),
               if (active.isNotEmpty) ...[

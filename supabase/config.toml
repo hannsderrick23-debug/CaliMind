@@ -1,2 +1,5 @@
 [functions.push-notifications]
 verify_jwt = false
+
+[functions.aventor-eye]
+verify_jwt = false

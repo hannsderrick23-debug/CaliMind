@@ -29,14 +29,21 @@ adjust your plan as priorities change.
   short note with it.
 - **Daily scheduling** — generate a proposed schedule, review it, and choose
   what to save. Replan remaining tasks while preserving completed work.
-- **Calendar-aware planning** — optionally account for busy calendar intervals
-  on supported platforms.
+- **Calendar-aware planning** — optionally use busy times from calendars synced
+  to an Android device, including Google Calendar. Event details stay on-device.
 - **Calendar event handoff** — on Android, open a task as a draft in an installed
-  calendar app and review it before saving.
+  calendar app, choose a synced calendar, and review it before saving.
 - **Focus sessions** — use a built-in timer to give one task your attention.
 - **Progress insights** — review weekly progress and recognize steady effort.
+- **Aventor Eye** — opt in to short, AI-generated schedule insights. Task titles
+  and timing are sent to Groq only while this feature is enabled; calendar busy
+  times are included only when calendar access is separately enabled. Generated
+  insights are cached on the device.
 - **Reminders and notifications** — configure device notifications and reminder
   sounds for tasks and schedule updates.
+- **Phone Clock alarms** — optionally open Android Clock with a task time
+  prefilled, then review and confirm the alarm in Clock. This is separate from
+  task-date notifications.
 - **Secure sign-in** — account access, password recovery, and biometric unlock
   where supported.
 - **Home-screen widgets** — view useful task information on supported devices.
@@ -61,6 +68,18 @@ tag is pushed.
 flutter pub get
 flutter run
 ```
+
+### Enable Aventor Eye
+
+Aventor Eye requires the Supabase Edge Function and a Groq API key:
+
+```sh
+supabase functions deploy aventor-eye
+supabase secrets set GROQ_API_KEY=your-groq-api-key
+```
+
+The function authenticates requests using Supabase and calls Groq server-side;
+the Groq key must never be added to the mobile app.
 
 ## Plan your day
 

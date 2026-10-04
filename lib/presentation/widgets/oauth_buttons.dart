@@ -8,11 +8,13 @@ import 'package:calimind/presentation/state/auth_provider.dart';
 class OAuthButtons extends ConsumerWidget {
   final bool isLoading;
   final bool photoStyle;
+  final bool enabled;
 
   const OAuthButtons({
     super.key,
     required this.isLoading,
     this.photoStyle = false,
+    this.enabled = true,
   });
 
   @override
@@ -61,7 +63,7 @@ class OAuthButtons extends ConsumerWidget {
                 icon: FontAwesomeIcons.google,
                 iconColor: const Color(0xFF4285F4),
                 photoStyle: photoStyle,
-                onPressed: isLoading
+                onPressed: isLoading || !enabled
                     ? null
                     : () => notifier.signInWithOAuth(OAuthProvider.google),
               ),
@@ -73,7 +75,7 @@ class OAuthButtons extends ConsumerWidget {
                 icon: FontAwesomeIcons.apple,
                 iconColor: CaliMindColors.foreground,
                 photoStyle: photoStyle,
-                onPressed: isLoading
+                onPressed: isLoading || !enabled
                     ? null
                     : () => notifier.signInWithOAuth(OAuthProvider.apple),
               ),

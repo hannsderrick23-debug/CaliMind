@@ -12,8 +12,9 @@ Future<void> _pumpAuthAnimations(WidgetTester tester) async {
 }
 
 void main() {
-  testWidgets('welcome opens separate registration and login screens',
-      (tester) async {
+  testWidgets('welcome opens separate registration and login screens', (
+    tester,
+  ) async {
     tester.view.physicalSize = const Size(800, 2200);
     tester.view.devicePixelRatio = 1;
     addTearDown(() {
@@ -24,9 +25,8 @@ void main() {
     await tester.pumpWidget(
       ProviderScope(
         child: Consumer(
-          builder: (context, ref, child) => MaterialApp.router(
-            routerConfig: ref.watch(appRouterProvider),
-          ),
+          builder: (context, ref, child) =>
+              MaterialApp.router(routerConfig: ref.watch(appRouterProvider)),
         ),
       ),
     );
@@ -84,12 +84,39 @@ void main() {
     expect(find.byType(TabBar), findsNothing);
     expect(find.text('Google'), findsOneWidget);
     expect(find.text('Apple'), findsOneWidget);
+    expect(find.text('Terms'), findsOneWidget);
+    expect(find.text('Privacy Policy'), findsOneWidget);
+    expect(tester.widget<Checkbox>(find.byType(Checkbox)).value, isFalse);
+    expect(
+      tester
+          .widget<OutlinedButton>(find.widgetWithText(OutlinedButton, 'Google'))
+          .onPressed,
+      isNull,
+    );
+    await tester.tap(find.text('Create account'));
+    await tester.pump();
+    expect(
+      find.text('Agree to the Terms and Privacy Policy to create an account.'),
+      findsOneWidget,
+    );
+    await tester.pump(const Duration(seconds: 5));
+    await tester.pumpAndSettle();
+    await tester.tap(find.byType(Checkbox));
+    await tester.pump();
+    expect(
+      tester
+          .widget<OutlinedButton>(find.widgetWithText(OutlinedButton, 'Google'))
+          .onPressed,
+      isNotNull,
+    );
 
     await tester.tap(find.byTooltip('Back'));
     await _pumpAuthAnimations(tester);
     expect(find.text('Make room for what matters.'), findsOneWidget);
 
-    await tester.tap(find.widgetWithText(TextButton, 'Sign in'));
+    await tester.pumpAndSettle();
+    final signInLink = find.widgetWithText(TextButton, 'Sign in');
+    tester.widget<TextButton>(signInLink).onPressed!.call();
     await _pumpAuthAnimations(tester);
     expect(find.text('Welcome back'), findsOneWidget);
     expect(find.text('Forgot password?'), findsOneWidget);
@@ -124,11 +151,10 @@ void main() {
     );
   });
 
-  testWidgets('splash screen shows the brand over the photo background',
-      (tester) async {
-    await tester.pumpWidget(
-      const MaterialApp(home: SplashScreen()),
-    );
+  testWidgets('splash screen shows the brand over the photo background', (
+    tester,
+  ) async {
+    await tester.pumpWidget(const MaterialApp(home: SplashScreen()));
     await tester.pump(const Duration(milliseconds: 600));
 
     expect(find.text('CaliMind'), findsOneWidget);
@@ -146,8 +172,9 @@ void main() {
     );
   });
 
-  testWidgets('successful authentication routes through a welcome screen',
-      (tester) async {
+  testWidgets('successful authentication routes through a welcome screen', (
+    tester,
+  ) async {
     tester.view.physicalSize = const Size(800, 2200);
     tester.view.devicePixelRatio = 1;
     addTearDown(() {
@@ -161,9 +188,8 @@ void main() {
       UncontrolledProviderScope(
         container: container,
         child: Consumer(
-          builder: (context, ref, child) => MaterialApp.router(
-            routerConfig: ref.watch(appRouterProvider),
-          ),
+          builder: (context, ref, child) =>
+              MaterialApp.router(routerConfig: ref.watch(appRouterProvider)),
         ),
       ),
     );

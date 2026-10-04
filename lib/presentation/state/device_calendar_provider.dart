@@ -8,8 +8,8 @@ final deviceCalendarServiceProvider = Provider<DeviceCalendarService>(
 
 final deviceCalendarProvider =
     StateNotifierProvider<DeviceCalendarNotifier, DeviceCalendarState>((ref) {
-  return DeviceCalendarNotifier(ref.read(deviceCalendarServiceProvider));
-});
+      return DeviceCalendarNotifier(ref.read(deviceCalendarServiceProvider));
+    });
 
 class DeviceCalendarState {
   final bool enabled;
@@ -69,6 +69,7 @@ class DeviceCalendarNotifier extends StateNotifier<DeviceCalendarState> {
   }
 
   Future<DeviceCalendarBusyResult> getBusyIntervalsForDay(DateTime day) async {
+    await _preferenceLoad;
     if (!state.enabled) {
       return DeviceCalendarBusyResult(
         status: DeviceCalendarAccessStatus.disabled,
@@ -76,10 +77,7 @@ class DeviceCalendarNotifier extends StateNotifier<DeviceCalendarState> {
     }
     final result = await _service.getBusyIntervalsForDay(day);
     if (mounted && result.status != DeviceCalendarAccessStatus.granted) {
-      state = DeviceCalendarState(
-        enabled: false,
-        accessStatus: result.status,
-      );
+      state = DeviceCalendarState(enabled: false, accessStatus: result.status);
     }
     return result;
   }
