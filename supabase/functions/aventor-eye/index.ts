@@ -174,9 +174,38 @@ Return valid JSON only, with no markdown.
         { role: "user", content: JSON.stringify(snapshot) },
       ],
       temperature: 0.35,
-      max_completion_tokens: 500,
+      max_completion_tokens: 1024,
       reasoning_effort: "low",
-      response_format: { type: "json_object" },
+      response_format: {
+        type: "json_schema",
+        json_schema: {
+          name: "aventor_eye_insights",
+          strict: true,
+          schema: {
+            type: "object",
+            properties: {
+              cards: {
+                type: "array",
+                items: {
+                  type: "object",
+                  properties: {
+                    kind: {
+                      type: "string",
+                      enum: ["focus", "balance", "celebrate", "reset"],
+                    },
+                    title: { type: "string" },
+                    message: { type: "string" },
+                  },
+                  required: ["kind", "title", "message"],
+                  additionalProperties: false,
+                },
+              },
+            },
+            required: ["cards"],
+            additionalProperties: false,
+          },
+        },
+      },
     }),
     signal: AbortSignal.timeout(20_000),
   });

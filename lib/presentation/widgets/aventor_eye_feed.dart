@@ -31,13 +31,13 @@ class AventorEyeFeed extends ConsumerStatefulWidget {
 }
 
 class _AventorEyeFeedState extends ConsumerState<AventorEyeFeed> {
-  static const _refreshInterval = Duration(minutes: 30);
-  static const _retryInterval = Duration(minutes: 15);
+  static const _refreshInterval = AventorEyeService.refreshInterval;
 
   bool? _enabled;
   bool _loading = false;
   bool _loadingPreference = true;
   String? _error;
+  String? _cacheNotice;
   List<AventorEyeInsight> _cards = const [];
   String? _requestedKey;
   DateTime? _snapshotTime;
@@ -99,6 +99,7 @@ class _AventorEyeFeedState extends ConsumerState<AventorEyeFeed> {
       _requestedKey = null;
       _snapshotTime = null;
       _error = null;
+      _cacheNotice = null;
       if (!enabled) {
         _cards = const [];
         _refreshTimer?.cancel();
@@ -143,7 +144,7 @@ class _AventorEyeFeedState extends ConsumerState<AventorEyeFeed> {
         }
         busyIntervals = busyResult.intervals;
       }
-      final cards = await AventorEyeService.instance.getInsights(
+      final result = await AventorEyeService.instance.getInsights(
         tasks: widget.tasks,
         slots: widget.slots,
         date: widget.date,
@@ -153,9 +154,14 @@ class _AventorEyeFeedState extends ConsumerState<AventorEyeFeed> {
       );
       if (!mounted) return;
       setState(() {
-        _cards = cards;
+        _cards = result.cards;
         _loading = false;
         _error = null;
+        _cacheNotice = result.isStale
+            ? result.refreshFailed
+                ? 'Refresh failed. Showing saved insights for now.'
+                : 'Showing saved insights until the next refresh.'
+            : null;
       });
       _scheduleNextRefresh(_refreshInterval);
     } catch (error) {
@@ -167,8 +173,11 @@ class _AventorEyeFeedState extends ConsumerState<AventorEyeFeed> {
             error is StateError && error.message.startsWith('Calendar access')
             ? error.message.toString()
             : 'Aventor Eye could not refresh your insights.';
+        _cacheNotice = _cards.isEmpty
+            ? null
+            : 'Refresh failed. Showing saved insights for now.';
       });
-      _scheduleNextRefresh(_retryInterval);
+      _scheduleNextRefresh(_refreshInterval);
     }
   }
 
@@ -305,6 +314,16 @@ class _AventorEyeFeedState extends ConsumerState<AventorEyeFeed> {
                   ),
                 ],
               ),
+              if (_cacheNotice != null) ...[
+                const SizedBox(height: 4),
+                Text(
+                  _cacheNotice!,
+                  style: CaliMindTypography.bodySmall.copyWith(
+                    color: CaliMindColors.mutedForeground,
+                    fontSize: 11,
+                  ),
+                ),
+              ],
               const SizedBox(height: 10),
               SizedBox(
                 height: 150,

@@ -46,10 +46,34 @@ class AventorEyeInsight {
   }
 
   Map<String, String> toJson() => {
-        'kind': kind.name,
-        'title': title,
-        'message': message,
-      };
+    'kind': kind.name,
+    'title': title,
+    'message': message,
+  };
+}
+
+class AventorEyeResult {
+  const AventorEyeResult({
+    required this.cards,
+    required this.isStale,
+    this.refreshFailed = false,
+  });
+
+  final List<AventorEyeInsight> cards;
+  final bool isStale;
+  final bool refreshFailed;
+}
+
+class _CachedAventorEyeResult {
+  const _CachedAventorEyeResult({
+    required this.snapshotFingerprint,
+    required this.fetchedAt,
+    required this.cards,
+  });
+
+  final String snapshotFingerprint;
+  final DateTime fetchedAt;
+  final List<AventorEyeInsight> cards;
 }
 
 class AventorEyeService {
@@ -58,6 +82,9 @@ class AventorEyeService {
   static final instance = AventorEyeService._();
   static const _enabledKey = 'aventor_eye_enabled';
   static const _cachePrefix = 'aventor_eye_cache_';
+  static const _latestCachePrefix = 'aventor_eye_latest_';
+  static const _lastRefreshKey = 'aventor_eye_last_refresh_at';
+  static const refreshInterval = Duration(minutes: 10);
   static final ValueNotifier<bool?> enabled = ValueNotifier<bool?>(null);
 
   Future<bool> isEnabled() async {
@@ -75,7 +102,9 @@ class AventorEyeService {
     enabled.value = value;
     if (!value) {
       for (final key in preferences.getKeys()) {
-        if (key.startsWith(_cachePrefix)) {
+        if (key.startsWith(_cachePrefix) ||
+            key.startsWith(_latestCachePrefix) ||
+            key == _lastRefreshKey) {
           await preferences.remove(key);
         }
       }
@@ -99,7 +128,7 @@ class AventorEyeService {
     return '${_dateKey(date)}_${_fingerprint(jsonEncode(snapshot))}';
   }
 
-  Future<List<AventorEyeInsight>> getInsights({
+  Future<AventorEyeResult> getInsights({
     required List<Task> tasks,
     required List<ScheduleSlot> slots,
     required DateTime date,
@@ -109,6 +138,9 @@ class AventorEyeService {
   }) async {
     if (!await isEnabled()) {
       throw StateError('Enable Aventor Eye in Settings to request insights.');
+    }
+    if (Supabase.instance.client.auth.currentUser == null) {
+      throw StateError('Sign in to refresh Aventor Eye insights.');
     }
 
     final localNow = (now ?? DateTime.now()).toLocal();
@@ -120,23 +152,72 @@ class AventorEyeService {
       now: localNow,
       busyIntervals: busyIntervals,
     );
-    final cacheKey = '$_cachePrefix${_dateKey(localDate)}_'
+    final cacheKey =
+        '$_cachePrefix${_dateKey(localDate)}_'
         '${_fingerprint(jsonEncode(snapshot))}';
+    final fingerprint = cacheKey.substring(
+      '$_cachePrefix${_dateKey(localDate)}_'.length,
+    );
+    final latestKey = '$_latestCachePrefix${_dateKey(localDate)}';
     final preferences = await SharedPreferences.getInstance();
     if (!forceRefresh) {
       final cached = preferences.getString(cacheKey);
-      if (cached != null) return _decodeCards(cached);
+      if (cached != null) {
+        return AventorEyeResult(cards: _decodeCards(cached), isStale: false);
+      }
     }
 
-    final response = await Supabase.instance.client.functions.invoke(
-      'aventor-eye',
-      body: snapshot,
-    );
-    final data = response.data;
-    if (data is! Map || data['cards'] is! List) {
-      throw const FormatException('Aventor Eye returned an invalid response.');
+    final latest =
+        _readLatest(preferences.getString(latestKey)) ??
+        _readLegacyLatest(preferences, localDate);
+    final lastRefresh = DateTime.tryParse(
+      preferences.getString(_lastRefreshKey) ?? '',
+    )?.toLocal();
+    final latestRefresh = latest?.fetchedAt;
+    final mostRecentRefresh =
+        lastRefresh == null ||
+            (latestRefresh != null && latestRefresh.isAfter(lastRefresh))
+        ? latestRefresh
+        : lastRefresh;
+    if (mostRecentRefresh != null) {
+      final sinceRefresh = localNow.difference(mostRecentRefresh);
+      if (sinceRefresh >= Duration.zero && sinceRefresh < refreshInterval) {
+        if (latest != null) {
+          return AventorEyeResult(
+            cards: latest.cards,
+            isStale: latest.snapshotFingerprint != fingerprint,
+          );
+        }
+        throw StateError(
+          'Aventor Eye will refresh automatically when its short cooldown ends.',
+        );
+      }
     }
-    final cards = _decodeCards(jsonEncode(data['cards']));
+
+    await preferences.setString(_lastRefreshKey, localNow.toIso8601String());
+    late final List<AventorEyeInsight> cards;
+    try {
+      final response = await Supabase.instance.client.functions.invoke(
+        'aventor-eye',
+        body: snapshot,
+      );
+      final data = response.data;
+      if (data is! Map || data['cards'] is! List) {
+        throw const FormatException(
+          'Aventor Eye returned an invalid response.',
+        );
+      }
+      cards = _decodeCards(jsonEncode(data['cards']));
+    } catch (error) {
+      if (latest == null) rethrow;
+      debugPrint('Aventor Eye refresh failed; showing cached insights: $error');
+      return AventorEyeResult(
+        cards: latest.cards,
+        isStale: true,
+        refreshFailed: true,
+      );
+    }
+
     final dayPrefix = '$_cachePrefix${_dateKey(localDate)}_';
     for (final key in preferences.getKeys()) {
       if (key.startsWith(dayPrefix) && key != cacheKey) {
@@ -147,13 +228,57 @@ class AventorEyeService {
       cacheKey,
       jsonEncode(cards.map((card) => card.toJson()).toList()),
     );
-    return cards;
+    await preferences.setString(
+      latestKey,
+      jsonEncode({
+        'snapshot_fingerprint': fingerprint,
+        'fetched_at': localNow.toIso8601String(),
+        'cards': cards.map((card) => card.toJson()).toList(),
+      }),
+    );
+    return AventorEyeResult(cards: cards, isStale: false);
+  }
+
+  _CachedAventorEyeResult? _readLatest(String? encoded) {
+    if (encoded == null) return null;
+    final decoded = jsonDecode(encoded);
+    if (decoded is! Map<String, dynamic> ||
+        decoded['snapshot_fingerprint'] is! String ||
+        decoded['fetched_at'] is! String ||
+        decoded['cards'] is! List) {
+      throw const FormatException('Aventor Eye cache is invalid.');
+    }
+    return _CachedAventorEyeResult(
+      snapshotFingerprint: decoded['snapshot_fingerprint'] as String,
+      fetchedAt: DateTime.parse(decoded['fetched_at'] as String).toLocal(),
+      cards: _decodeCards(jsonEncode(decoded['cards'])),
+    );
+  }
+
+  _CachedAventorEyeResult? _readLegacyLatest(
+    SharedPreferences preferences,
+    DateTime date,
+  ) {
+    final prefix = '$_cachePrefix${_dateKey(date)}_';
+    for (final key in preferences.getKeys()) {
+      if (!key.startsWith(prefix)) continue;
+      final encoded = preferences.getString(key);
+      if (encoded == null) continue;
+      return _CachedAventorEyeResult(
+        snapshotFingerprint: key.substring(prefix.length),
+        fetchedAt: DateTime.fromMillisecondsSinceEpoch(0),
+        cards: _decodeCards(encoded),
+      );
+    }
+    return null;
   }
 
   List<AventorEyeInsight> _decodeCards(String encoded) {
     final decoded = jsonDecode(encoded);
     if (decoded is! List || decoded.length > 3) {
-      throw const FormatException('Aventor Eye returned invalid insight cards.');
+      throw const FormatException(
+        'Aventor Eye returned invalid insight cards.',
+      );
     }
     return decoded
         .map((item) {
@@ -175,58 +300,67 @@ class AventorEyeService {
     required List<CalendarBusyInterval> busyIntervals,
   }) {
     final dateKey = _dateKey(date);
-    final relevantTasks = tasks.where((task) {
-      if (task.completed) return false;
-      final deadline = task.deadline?.toLocal();
-      return deadline == null || _dateKey(deadline).compareTo(dateKey) <= 0;
-    }).toList()
-      ..sort((a, b) {
-        final byPriority = a.priority.compareTo(b.priority);
-        if (byPriority != 0) return byPriority;
-        return (a.deadline?.toIso8601String() ?? '')
-            .compareTo(b.deadline?.toIso8601String() ?? '');
-      });
+    final relevantTasks =
+        tasks.where((task) {
+          if (task.completed) return false;
+          final deadline = task.deadline?.toLocal();
+          return deadline == null || _dateKey(deadline).compareTo(dateKey) <= 0;
+        }).toList()..sort((a, b) {
+          final byPriority = a.priority.compareTo(b.priority);
+          if (byPriority != 0) return byPriority;
+          return (a.deadline?.toIso8601String() ?? '').compareTo(
+            b.deadline?.toIso8601String() ?? '',
+          );
+        });
 
     return {
       'local_date': dateKey,
       'local_time':
           '${now.hour.toString().padLeft(2, '0')}:${now.minute.toString().padLeft(2, '0')}',
-      'tasks': relevantTasks.take(40).map((task) {
-        final deadline = task.deadline?.toLocal();
-        final reminder = task.reminderAt?.toLocal();
-        return {
-          'title': task.title.trim().substring(
+      'tasks': relevantTasks
+          .take(40)
+          .map((task) {
+            final deadline = task.deadline?.toLocal();
+            final reminder = task.reminderAt?.toLocal();
+            return {
+              'title': task.title.trim().substring(
                 0,
                 task.title.trim().length.clamp(0, 120),
               ),
-          'category': task.category.label,
-          'duration_minutes': task.duration.clamp(1, 1440),
-          'priority': task.priority.clamp(1, 3),
-          'deadline': deadline?.toIso8601String(),
-          'reminder_at': reminder?.toIso8601String(),
-          'specific_time': _validTime(task.specificTime)
-              ? task.specificTime
-              : null,
-        };
-      }).toList(growable: false),
-      'schedule': slots.take(40).map((slot) {
-        final title = slot.taskTitle.trim();
-        return {
-          'title': title.substring(0, title.length.clamp(0, 120)),
-          'category': slot.category.label,
-          'start_time': slot.startTime,
-          'end_time': slot.endTime,
-        };
-      }).toList(growable: false),
-      'busy_intervals': busyIntervals.map((interval) {
-        String time(DateTime value) =>
-            '${value.hour.toString().padLeft(2, '0')}:'
-            '${value.minute.toString().padLeft(2, '0')}';
-        return {
-          'start_time': time(interval.start.toLocal()),
-          'end_time': time(interval.end.toLocal()),
-        };
-      }).toList(growable: false),
+              'category': task.category.label,
+              'duration_minutes': task.duration.clamp(1, 1440),
+              'priority': task.priority.clamp(1, 3),
+              'deadline': deadline?.toIso8601String(),
+              'reminder_at': reminder?.toIso8601String(),
+              'specific_time': _validTime(task.specificTime)
+                  ? task.specificTime
+                  : null,
+            };
+          })
+          .toList(growable: false),
+      'schedule': slots
+          .take(40)
+          .map((slot) {
+            final title = slot.taskTitle.trim();
+            return {
+              'title': title.substring(0, title.length.clamp(0, 120)),
+              'category': slot.category.label,
+              'start_time': slot.startTime,
+              'end_time': slot.endTime,
+            };
+          })
+          .toList(growable: false),
+      'busy_intervals': busyIntervals
+          .map((interval) {
+            String time(DateTime value) =>
+                '${value.hour.toString().padLeft(2, '0')}:'
+                '${value.minute.toString().padLeft(2, '0')}';
+            return {
+              'start_time': time(interval.start.toLocal()),
+              'end_time': time(interval.end.toLocal()),
+            };
+          })
+          .toList(growable: false),
     };
   }
 

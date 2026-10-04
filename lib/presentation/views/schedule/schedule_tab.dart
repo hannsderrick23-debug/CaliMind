@@ -326,8 +326,11 @@ class ScheduleTabState extends ConsumerState<ScheduleTab> {
     final schedule = ref.watch(scheduleProvider);
     final tasks = ref.watch(taskProvider).valueOrNull ?? const [];
 
-    return Column(
-      children: [
+    return SingleChildScrollView(
+      primary: false,
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        children: [
         MonthCalendarView(
           month: schedule.calendarMonth,
           selectedDate: schedule.activeDate,
@@ -376,14 +379,16 @@ class ScheduleTabState extends ConsumerState<ScheduleTab> {
         if (schedule.unscheduled.isNotEmpty)
           _buildUnscheduledBanner(schedule.unscheduled),
         // Schedule view
-        Expanded(
-          child: schedule.isGenerating
-              ? const Center(
-                  child:
-                      CircularProgressIndicator(color: CaliMindColors.primary))
-              : _buildCurrentView(schedule),
-        ),
-      ],
+        if (schedule.isGenerating)
+          const Padding(
+            padding: EdgeInsets.symmetric(vertical: 48),
+            child: CircularProgressIndicator(color: CaliMindColors.primary),
+          )
+        else
+          _buildCurrentView(schedule),
+        const SizedBox(height: 24),
+        ],
+      ),
     );
   }
 

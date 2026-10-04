@@ -39,7 +39,8 @@ adjust your plan as priorities change.
   and timing are sent to Groq only while this feature is enabled; calendar busy
   times are included only when calendar access is separately enabled. Generated
   insights are cached on the device and refresh automatically as plans change
-  and every 30 minutes while the dashboard is open.
+  and every 10 minutes while the dashboard is open, with a 10-minute request
+  cooldown to limit Groq usage.
 - **Reminders and notifications** — configure device notifications and reminder
   sounds for tasks and schedule updates.
 - **Phone Clock alarms** — optionally open Android Clock with a task time

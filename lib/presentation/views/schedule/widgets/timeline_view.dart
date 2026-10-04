@@ -21,7 +21,9 @@ class TimelineView extends StatelessWidget {
     }
 
     return ListView.builder(
-      padding: const EdgeInsets.fromLTRB(20, 12, 20, 120),
+      shrinkWrap: true,
+      physics: const NeverScrollableScrollPhysics(),
+      padding: const EdgeInsets.fromLTRB(20, 12, 20, 24),
       itemCount: slots.length * 2 - 1,
       itemBuilder: (context, i) {
         if (i.isEven) {
