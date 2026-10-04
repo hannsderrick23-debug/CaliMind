@@ -38,7 +38,8 @@ adjust your plan as priorities change.
 - **Aventor Eye** — opt in to short, AI-generated schedule insights. Task titles
   and timing are sent to Groq only while this feature is enabled; calendar busy
   times are included only when calendar access is separately enabled. Generated
-  insights are cached on the device.
+  insights are cached on the device and refresh automatically as plans change
+  and every 30 minutes while the dashboard is open.
 - **Reminders and notifications** — configure device notifications and reminder
   sounds for tasks and schedule updates.
 - **Phone Clock alarms** — optionally open Android Clock with a task time
@@ -53,7 +54,9 @@ adjust your plan as priorities change.
 Download the latest Android APK from
 [GitHub Releases](https://github.com/hannsderrick23-debug/CaliMind/releases/latest).
 New Android releases are built and published automatically when a `v*` version
-tag is pushed.
+tag is pushed. Configure the repository Actions secret
+`ANDROID_GOOGLE_SERVICES_JSON` with the Android Firebase client configuration
+before publishing a release.
 
 ## Run from source
 

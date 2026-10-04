@@ -16,6 +16,7 @@ import 'package:calimind/presentation/state/voice_assistant_provider.dart';
 import 'package:calimind/presentation/state/task_provider.dart';
 import 'package:calimind/presentation/widgets/calimind_mark.dart';
 import '../schedule/schedule_tab.dart';
+import '../tasks/task_input_sheet.dart';
 import '../tasks/task_list_tab.dart';
 import 'widgets/role_focus_bar.dart';
 import 'widgets/voice_assistant_fab.dart';
@@ -232,7 +233,24 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen>
           ),
         ],
       ),
+      floatingActionButton: _tabController.index == 0
+          ? FloatingActionButton.extended(
+              onPressed: _showTaskInput,
+              icon: const Icon(LucideIcons.plus),
+              label: const Text('Add task'),
+            )
+          : null,
+      floatingActionButtonLocation: FloatingActionButtonLocation.endFloat,
       bottomNavigationBar: _buildBottomBar(),
+    );
+  }
+
+  void _showTaskInput() {
+    showModalBottomSheet<void>(
+      context: context,
+      isScrollControlled: true,
+      backgroundColor: Colors.transparent,
+      builder: (_) => const TaskInputSheet(),
     );
   }
 

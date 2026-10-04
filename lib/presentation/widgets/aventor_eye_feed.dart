@@ -31,6 +31,9 @@ class AventorEyeFeed extends ConsumerStatefulWidget {
 }
 
 class _AventorEyeFeedState extends ConsumerState<AventorEyeFeed> {
+  static const _refreshInterval = Duration(minutes: 30);
+  static const _retryInterval = Duration(minutes: 15);
+
   bool? _enabled;
   bool _loading = false;
   bool _loadingPreference = true;
@@ -38,6 +41,7 @@ class _AventorEyeFeedState extends ConsumerState<AventorEyeFeed> {
   List<AventorEyeInsight> _cards = const [];
   String? _requestedKey;
   DateTime? _snapshotTime;
+  Timer? _refreshTimer;
 
   @override
   void initState() {
@@ -48,8 +52,23 @@ class _AventorEyeFeedState extends ConsumerState<AventorEyeFeed> {
 
   @override
   void dispose() {
+    _refreshTimer?.cancel();
     AventorEyeService.enabled.removeListener(_onPreferenceChanged);
     super.dispose();
+  }
+
+  @override
+  void didUpdateWidget(covariant AventorEyeFeed oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (oldWidget.tasks != widget.tasks ||
+        oldWidget.slots != widget.slots ||
+        oldWidget.date != widget.date) {
+      _requestedKey = null;
+      _snapshotTime = null;
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (mounted) _requestIfNeeded();
+      });
+    }
   }
 
   Future<void> _loadPreference() async {
@@ -80,7 +99,10 @@ class _AventorEyeFeedState extends ConsumerState<AventorEyeFeed> {
       _requestedKey = null;
       _snapshotTime = null;
       _error = null;
-      if (!enabled) _cards = const [];
+      if (!enabled) {
+        _cards = const [];
+        _refreshTimer?.cancel();
+      }
     });
     if (enabled) _requestIfNeeded();
   }
@@ -133,7 +155,9 @@ class _AventorEyeFeedState extends ConsumerState<AventorEyeFeed> {
       setState(() {
         _cards = cards;
         _loading = false;
+        _error = null;
       });
+      _scheduleNextRefresh(_refreshInterval);
     } catch (error) {
       debugPrint('Aventor Eye could not load schedule insights: $error');
       if (!mounted) return;
@@ -144,7 +168,19 @@ class _AventorEyeFeedState extends ConsumerState<AventorEyeFeed> {
             ? error.message.toString()
             : 'Aventor Eye could not refresh your insights.';
       });
+      _scheduleNextRefresh(_retryInterval);
     }
+  }
+
+  void _scheduleNextRefresh(Duration delay) {
+    _refreshTimer?.cancel();
+    if (_enabled != true) return;
+    _refreshTimer = Timer(delay, () {
+      if (!mounted || _enabled != true) return;
+      _requestedKey = null;
+      _snapshotTime = DateTime.now();
+      _requestIfNeeded(forceRefresh: true);
+    });
   }
 
   Future<void> _setEnabled(bool enabled) async {
@@ -228,18 +264,11 @@ class _AventorEyeFeedState extends ConsumerState<AventorEyeFeed> {
         const SizedBox(width: 12),
         Expanded(
           child: Text(
-            _error!,
+            '$_error We’ll try again automatically.',
             style: CaliMindTypography.bodySmall.copyWith(
               color: CaliMindColors.mutedForeground,
             ),
           ),
-        ),
-        TextButton(
-          onPressed: () {
-            _requestedKey = null;
-            _requestIfNeeded(forceRefresh: true);
-          },
-          child: const Text('Retry'),
         ),
       ],
     ),
@@ -259,13 +288,6 @@ class _AventorEyeFeedState extends ConsumerState<AventorEyeFeed> {
             ),
           ),
         ),
-        IconButton(
-          tooltip: 'Refresh Aventor Eye insights',
-          onPressed: _loading
-              ? null
-              : () => _requestIfNeeded(forceRefresh: true),
-          icon: const Icon(LucideIcons.refreshCw, size: 18),
-        ),
       ],
     ),
   );
@@ -280,22 +302,6 @@ class _AventorEyeFeedState extends ConsumerState<AventorEyeFeed> {
                   const SizedBox(width: 10),
                   Expanded(
                     child: Text('Aventor Eye', style: CaliMindTypography.h3),
-                  ),
-                  IconButton(
-                    tooltip: 'Refresh Aventor Eye insights',
-                    onPressed: _loading
-                        ? null
-                        : () => _requestIfNeeded(forceRefresh: true),
-                    icon: _loading
-                        ? const SizedBox(
-                            width: 16,
-                            height: 16,
-                            child: CircularProgressIndicator(
-                              strokeWidth: 2,
-                              color: CaliMindColors.primary,
-                            ),
-                          )
-                        : const Icon(LucideIcons.refreshCw, size: 18),
                   ),
                 ],
               ),
@@ -339,19 +345,21 @@ class _AventorEyeFeedState extends ConsumerState<AventorEyeFeed> {
           width: 286,
           padding: const EdgeInsets.all(16),
           decoration: BoxDecoration(
-            color: CaliMindColors.card,
+            color: color,
             borderRadius: BorderRadius.circular(18),
-            border: Border.all(color: color.withValues(alpha: 0.18)),
-            gradient: LinearGradient(
-              colors: [color.withValues(alpha: 0.07), CaliMindColors.card],
-              begin: Alignment.topLeft,
-              end: Alignment.bottomRight,
-            ),
+            border: Border.all(color: Colors.white.withValues(alpha: 0.2)),
+            boxShadow: [
+              BoxShadow(
+                color: color.withValues(alpha: 0.18),
+                blurRadius: 14,
+                offset: const Offset(0, 6),
+              ),
+            ],
           ),
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              Icon(icon, color: color, size: 20)
+              Icon(icon, color: Colors.white, size: 20)
                   .animate(
                     onPlay: (controller) => controller.repeat(reverse: true),
                   )
@@ -367,6 +375,7 @@ class _AventorEyeFeedState extends ConsumerState<AventorEyeFeed> {
                 maxLines: 1,
                 overflow: TextOverflow.ellipsis,
                 style: CaliMindTypography.bodyMedium.copyWith(
+                  color: Colors.white,
                   fontWeight: FontWeight.w700,
                 ),
               ),
@@ -376,7 +385,7 @@ class _AventorEyeFeedState extends ConsumerState<AventorEyeFeed> {
                 maxLines: 3,
                 overflow: TextOverflow.ellipsis,
                 style: CaliMindTypography.bodySmall.copyWith(
-                  color: CaliMindColors.mutedForeground,
+                  color: Colors.white.withValues(alpha: 0.92),
                   height: 1.4,
                 ),
               ),

@@ -56,15 +56,6 @@ class TaskListTab extends ConsumerWidget {
           child: ListView(
             padding: const EdgeInsets.fromLTRB(20, 16, 20, 120),
             children: [
-              Align(
-                alignment: Alignment.centerRight,
-                child: FilledButton.icon(
-                  onPressed: () => _showTaskInput(context),
-                  icon: const Icon(LucideIcons.plus, size: 18),
-                  label: const Text('Add task'),
-                ),
-              ),
-              const SizedBox(height: 16),
               AventorEyeFeed(
                 tasks: allTasks,
                 slots: schedule.slots,
@@ -80,16 +71,18 @@ class TaskListTab extends ConsumerWidget {
                   color: CaliMindColors.primary,
                 ),
                 const SizedBox(height: 8),
-                ...active.map((t) => TaskCard(
-                      task: t,
-                      onOpen: () => context.push('/tasks/${t.id}', extra: t),
-                      onEdit: () => showModalBottomSheet(
-                        context: context,
-                        isScrollControlled: true,
-                        backgroundColor: Colors.transparent,
-                        builder: (_) => TaskInputSheet(taskToEdit: t),
-                      ),
-                    )),
+                ...active.map(
+                  (t) => TaskCard(
+                    task: t,
+                    onOpen: () => context.push('/tasks/${t.id}', extra: t),
+                    onEdit: () => showModalBottomSheet(
+                      context: context,
+                      isScrollControlled: true,
+                      backgroundColor: Colors.transparent,
+                      builder: (_) => TaskInputSheet(taskToEdit: t),
+                    ),
+                  ),
+                ),
                 const SizedBox(height: 20),
               ],
               if (done.isNotEmpty) ...[
@@ -99,16 +92,18 @@ class TaskListTab extends ConsumerWidget {
                   color: CaliMindColors.success,
                 ),
                 const SizedBox(height: 8),
-                ...done.map((t) => TaskCard(
-                      task: t,
-                      onOpen: () => context.push('/tasks/${t.id}', extra: t),
-                      onEdit: () => showModalBottomSheet(
-                        context: context,
-                        isScrollControlled: true,
-                        backgroundColor: Colors.transparent,
-                        builder: (_) => TaskInputSheet(taskToEdit: t),
-                      ),
-                    )),
+                ...done.map(
+                  (t) => TaskCard(
+                    task: t,
+                    onOpen: () => context.push('/tasks/${t.id}', extra: t),
+                    onEdit: () => showModalBottomSheet(
+                      context: context,
+                      isScrollControlled: true,
+                      backgroundColor: Colors.transparent,
+                      builder: (_) => TaskInputSheet(taskToEdit: t),
+                    ),
+                  ),
+                ),
               ],
             ],
           ),
@@ -143,27 +138,12 @@ class TaskListTab extends ConsumerWidget {
           ),
           const SizedBox(height: 8),
           Text(
-            'Tap the mic button to add tasks by voice',
+            'Use the + button to add a task, or tap the mic to add one by voice.',
             style: CaliMindTypography.label,
             textAlign: TextAlign.center,
           ),
-          const SizedBox(height: 20),
-          FilledButton.icon(
-            onPressed: () => _showTaskInput(context),
-            icon: const Icon(LucideIcons.plus, size: 18),
-            label: const Text('Create a task manually'),
-          ),
         ],
       ).animate().fadeIn(duration: 500.ms).scale(begin: const Offset(0.9, 0.9)),
-    );
-  }
-
-  void _showTaskInput(BuildContext context) {
-    showModalBottomSheet<void>(
-      context: context,
-      isScrollControlled: true,
-      backgroundColor: Colors.transparent,
-      builder: (_) => const TaskInputSheet(),
     );
   }
 }
@@ -173,7 +153,11 @@ class _SectionHeader extends StatelessWidget {
   final int count;
   final Color color;
 
-  const _SectionHeader({required this.label, required this.count, required this.color});
+  const _SectionHeader({
+    required this.label,
+    required this.count,
+    required this.color,
+  });
 
   @override
   Widget build(BuildContext context) {
@@ -188,7 +172,13 @@ class _SectionHeader extends StatelessWidget {
           ),
         ),
         const SizedBox(width: 10),
-        Text(label, style: CaliMindTypography.label.copyWith(color: color, fontWeight: FontWeight.w700)),
+        Text(
+          label,
+          style: CaliMindTypography.label.copyWith(
+            color: color,
+            fontWeight: FontWeight.w700,
+          ),
+        ),
         const SizedBox(width: 6),
         Container(
           padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 1),
@@ -196,11 +186,14 @@ class _SectionHeader extends StatelessWidget {
             color: color.withValues(alpha: 0.12),
             borderRadius: BorderRadius.circular(8),
           ),
-          child: Text('$count', style: CaliMindTypography.bodySmall.copyWith(
-            fontSize: 10,
-            fontWeight: FontWeight.w700,
-            color: color,
-          )),
+          child: Text(
+            '$count',
+            style: CaliMindTypography.bodySmall.copyWith(
+              fontSize: 10,
+              fontWeight: FontWeight.w700,
+              color: color,
+            ),
+          ),
         ),
       ],
     );

@@ -174,14 +174,35 @@ Return valid JSON only, with no markdown.
         { role: "user", content: JSON.stringify(snapshot) },
       ],
       temperature: 0.35,
-      max_tokens: 500,
+      max_completion_tokens: 500,
+      reasoning_effort: "low",
       response_format: { type: "json_object" },
     }),
     signal: AbortSignal.timeout(20_000),
   });
 
   if (!response.ok) {
-    console.error("Aventor Eye Groq request failed:", response.status);
+    let errorCode: string | undefined;
+    let errorType: string | undefined;
+    try {
+      const errorBody: unknown = await response.json();
+      if (isRecord(errorBody) && isRecord(errorBody.error)) {
+        if (typeof errorBody.error.code === "string") {
+          errorCode = errorBody.error.code;
+        }
+        if (typeof errorBody.error.type === "string") {
+          errorType = errorBody.error.type;
+        }
+      }
+    } catch {
+      // Keep upstream response details out of logs; they may include user data.
+    }
+    console.error("Aventor Eye Groq request failed", {
+      status: response.status,
+      model: groqChatModel,
+      errorCode,
+      errorType,
+    });
     return jsonResponse({ error: "Aventor Eye could not analyze this plan." }, 502);
   }
 
