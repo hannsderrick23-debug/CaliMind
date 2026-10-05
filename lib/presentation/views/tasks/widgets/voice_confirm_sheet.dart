@@ -9,6 +9,7 @@ import 'package:calimind/core/services/task_reminder_service.dart';
 import 'package:calimind/core/services/widget_service.dart';
 import 'package:calimind/core/utils/haptic_feedback_utils.dart';
 import 'package:calimind/core/utils/app_feedback.dart';
+import 'package:calimind/core/utils/task_reminder_utils.dart';
 import 'package:calimind/domain/models/task.dart';
 import 'package:calimind/presentation/state/schedule_provider.dart';
 import 'package:calimind/presentation/state/task_provider.dart';
@@ -32,11 +33,22 @@ class _VoiceConfirmSheetState extends ConsumerState<VoiceConfirmSheet> {
   late TextEditingController _titleCtrl;
   late NewTask _draft;
   bool _isSaving = false;
+  bool _reminderCustomized = false;
+  bool _reminderDisabled = false;
 
   @override
   void initState() {
     super.initState();
     _draft = ref.read(voiceAssistantProvider).draftTask!;
+    _reminderCustomized = _draft.reminderAt != null;
+    if (_draft.reminderAt == null && _draft.specificTime != null) {
+      _draft = _draft.copyWith(
+        reminderAt: defaultTaskReminderAt(
+          specificTime: _draft.specificTime,
+          deadline: _draft.deadline,
+        ),
+      );
+    }
     _titleCtrl = TextEditingController(text: _draft.title);
   }
 
@@ -66,8 +78,10 @@ class _VoiceConfirmSheetState extends ConsumerState<VoiceConfirmSheet> {
 
     await WidgetService.refresh(
       ref.read(taskProvider).valueOrNull ?? const <Task>[],
-      scheduledTaskIds:
-          ref.read(scheduleProvider).slots.map((slot) => slot.taskId),
+      scheduledTaskIds: ref
+          .read(scheduleProvider)
+          .slots
+          .map((slot) => slot.taskId),
     );
 
     var reminderWarning = false;
@@ -110,12 +124,17 @@ class _VoiceConfirmSheetState extends ConsumerState<VoiceConfirmSheet> {
       initialTime: initial == null
           ? TimeOfDay.now()
           : TimeOfDay(
-              hour: int.parse(initial[0]), minute: int.parse(initial[1])),
+              hour: int.parse(initial[0]),
+              minute: int.parse(initial[1]),
+            ),
     );
     if (result == null) return;
     final value =
         '${result.hour.toString().padLeft(2, '0')}:${result.minute.toString().padLeft(2, '0')}';
-    setState(() => _draft = _draft.copyWith(specificTime: value));
+    setState(() {
+      _draft = _draft.copyWith(specificTime: value);
+      _updateDefaultReminder();
+    });
   }
 
   Future<void> _chooseDeadline() async {
@@ -131,18 +150,48 @@ class _VoiceConfirmSheetState extends ConsumerState<VoiceConfirmSheet> {
       _draft = _draft.copyWith(
         deadline: DateTime(result.year, result.month, result.day, 23, 59),
       );
+      _updateDefaultReminder();
     });
+  }
+
+  void _updateDefaultReminder() {
+    if (_reminderCustomized || _reminderDisabled) return;
+    _draft = _draft.copyWith(
+      reminderAt: defaultTaskReminderAt(
+        specificTime: _draft.specificTime,
+        deadline: _draft.deadline,
+      ),
+      clearReminder: _draft.specificTime == null,
+    );
+  }
+
+  String get _defaultReminderLabel {
+    final reminder = defaultTaskReminderAt(
+      specificTime: _draft.specificTime,
+      deadline: _draft.deadline,
+    );
+    return reminder == null
+        ? 'Set a reminder'
+        : '30 min before · ${DateFormat('EEE, MMM d · h:mm a').format(reminder)}';
   }
 
   Future<void> _chooseReminder() async {
     final initial =
-        _draft.reminderAt ?? DateTime.now().add(const Duration(hours: 1));
+        _draft.reminderAt ??
+        defaultTaskReminderAt(
+          specificTime: _draft.specificTime,
+          deadline: _draft.deadline,
+        ) ??
+        DateTime.now().add(const Duration(hours: 1));
     final now = DateTime.now();
     final initialDate = initial.isBefore(now) ? now : initial;
     final date = await showDatePicker(
       context: context,
-      initialDate:
-          DateTime(initialDate.year, initialDate.month, initialDate.day),
+      initialDate: DateTime(
+        initialDate.year,
+        initialDate.month,
+        initialDate.day,
+      ),
       firstDate: DateTime.now(),
       lastDate: DateTime.now().add(const Duration(days: 3650)),
     );
@@ -154,9 +203,16 @@ class _VoiceConfirmSheetState extends ConsumerState<VoiceConfirmSheet> {
     if (time == null) return;
     setState(() {
       _draft = _draft.copyWith(
-        reminderAt:
-            DateTime(date.year, date.month, date.day, time.hour, time.minute),
+        reminderAt: DateTime(
+          date.year,
+          date.month,
+          date.day,
+          time.hour,
+          time.minute,
+        ),
       );
+      _reminderCustomized = true;
+      _reminderDisabled = false;
     });
   }
 
@@ -204,8 +260,11 @@ class _VoiceConfirmSheetState extends ConsumerState<VoiceConfirmSheet> {
                       color: CaliMindColors.primary,
                       borderRadius: BorderRadius.circular(10),
                     ),
-                    child: const Icon(LucideIcons.mic,
-                        color: Colors.white, size: 16),
+                    child: const Icon(
+                      LucideIcons.mic,
+                      color: Colors.white,
+                      size: 16,
+                    ),
                   ),
                   const SizedBox(width: 12),
                   Column(
@@ -213,53 +272,72 @@ class _VoiceConfirmSheetState extends ConsumerState<VoiceConfirmSheet> {
                     children: [
                       Row(
                         children: [
-                          Text('Review your request',
-                              style:
-                                  CaliMindTypography.h3.copyWith(fontSize: 16)),
-                          Consumer(builder: (context, ref, _) {
-                            final usedAi =
-                                ref.watch(voiceAssistantProvider).usedAiParser;
-                            if (!usedAi) return const SizedBox.shrink();
-                            return Container(
-                              margin: const EdgeInsets.only(left: 8),
-                              padding: const EdgeInsets.symmetric(
-                                  horizontal: 6, vertical: 2),
-                              decoration: BoxDecoration(
-                                color: CaliMindColors.primary
-                                    .withValues(alpha: 0.15),
-                                borderRadius: BorderRadius.circular(6),
-                                border: Border.all(
-                                    color: CaliMindColors.primary
-                                        .withValues(alpha: 0.3)),
-                              ),
-                              child: Row(
-                                mainAxisSize: MainAxisSize.min,
-                                children: [
-                                  const Icon(LucideIcons.sparkles,
-                                      size: 10, color: CaliMindColors.primary),
-                                  const SizedBox(width: 3),
-                                  Text('Groq AI',
-                                      style:
-                                          CaliMindTypography.bodySmall.copyWith(
-                                        fontSize: 9,
-                                        fontWeight: FontWeight.w700,
-                                        color: CaliMindColors.primary,
-                                      )),
-                                ],
-                              ),
-                            );
-                          }),
+                          Text(
+                            'Review your request',
+                            style: CaliMindTypography.h3.copyWith(fontSize: 16),
+                          ),
+                          Consumer(
+                            builder: (context, ref, _) {
+                              final usedAi = ref
+                                  .watch(voiceAssistantProvider)
+                                  .usedAiParser;
+                              if (!usedAi) return const SizedBox.shrink();
+                              return Container(
+                                margin: const EdgeInsets.only(left: 8),
+                                padding: const EdgeInsets.symmetric(
+                                  horizontal: 6,
+                                  vertical: 2,
+                                ),
+                                decoration: BoxDecoration(
+                                  color: CaliMindColors.primary.withValues(
+                                    alpha: 0.15,
+                                  ),
+                                  borderRadius: BorderRadius.circular(6),
+                                  border: Border.all(
+                                    color: CaliMindColors.primary.withValues(
+                                      alpha: 0.3,
+                                    ),
+                                  ),
+                                ),
+                                child: Row(
+                                  mainAxisSize: MainAxisSize.min,
+                                  children: [
+                                    const Icon(
+                                      LucideIcons.sparkles,
+                                      size: 10,
+                                      color: CaliMindColors.primary,
+                                    ),
+                                    const SizedBox(width: 3),
+                                    Text(
+                                      'Groq AI',
+                                      style: CaliMindTypography.bodySmall
+                                          .copyWith(
+                                            fontSize: 9,
+                                            fontWeight: FontWeight.w700,
+                                            color: CaliMindColors.primary,
+                                          ),
+                                    ),
+                                  ],
+                                ),
+                              );
+                            },
+                          ),
                         ],
                       ),
-                      Text('Review & confirm before saving',
-                          style: CaliMindTypography.label),
+                      Text(
+                        'Review & confirm before saving',
+                        style: CaliMindTypography.label,
+                      ),
                     ],
                   ),
                   const Spacer(),
                   IconButton(
                     onPressed: widget.onDismissed,
-                    icon: const Icon(LucideIcons.x,
-                        color: CaliMindColors.mutedForeground, size: 20),
+                    icon: const Icon(
+                      LucideIcons.x,
+                      color: CaliMindColors.mutedForeground,
+                      size: 20,
+                    ),
                   ),
                 ],
               ),
@@ -273,8 +351,9 @@ class _VoiceConfirmSheetState extends ConsumerState<VoiceConfirmSheet> {
               const SizedBox(height: 8),
               Consumer(
                 builder: (context, ref, child) {
-                  final transcript =
-                      ref.watch(voiceAssistantProvider).finalTranscript;
+                  final transcript = ref
+                      .watch(voiceAssistantProvider)
+                      .finalTranscript;
                   return Container(
                     width: double.infinity,
                     padding: const EdgeInsets.all(12),
@@ -296,9 +375,12 @@ class _VoiceConfirmSheetState extends ConsumerState<VoiceConfirmSheet> {
               ),
               const SizedBox(height: 16),
               // Title field
-              Text('Task Title',
-                  style: CaliMindTypography.label
-                      .copyWith(fontWeight: FontWeight.w600)),
+              Text(
+                'Task Title',
+                style: CaliMindTypography.label.copyWith(
+                  fontWeight: FontWeight.w600,
+                ),
+              ),
               const SizedBox(height: 8),
               Container(
                 decoration: BoxDecoration(
@@ -309,12 +391,15 @@ class _VoiceConfirmSheetState extends ConsumerState<VoiceConfirmSheet> {
                 child: TextField(
                   controller: _titleCtrl,
                   maxLength: 200,
-                  style: CaliMindTypography.bodyMedium
-                      .copyWith(fontWeight: FontWeight.w600),
+                  style: CaliMindTypography.bodyMedium.copyWith(
+                    fontWeight: FontWeight.w600,
+                  ),
                   decoration: const InputDecoration(
                     border: InputBorder.none,
-                    contentPadding:
-                        EdgeInsets.symmetric(horizontal: 14, vertical: 14),
+                    contentPadding: EdgeInsets.symmetric(
+                      horizontal: 14,
+                      vertical: 14,
+                    ),
                   ),
                 ),
               ),
@@ -338,10 +423,10 @@ class _VoiceConfirmSheetState extends ConsumerState<VoiceConfirmSheet> {
                 onPressed: _chooseExactTime,
                 onClear: _draft.specificTime == null
                     ? null
-                    : () => setState(
-                          () =>
-                              _draft = _draft.copyWith(clearSpecificTime: true),
-                        ),
+                    : () => setState(() {
+                        _draft = _draft.copyWith(clearSpecificTime: true);
+                        _updateDefaultReminder();
+                      }),
               ),
               const SizedBox(height: 12),
               _buildScheduleControl(
@@ -353,24 +438,35 @@ class _VoiceConfirmSheetState extends ConsumerState<VoiceConfirmSheet> {
                 onPressed: _chooseDeadline,
                 onClear: _draft.deadline == null
                     ? null
-                    : () => setState(
-                          () => _draft = _draft.copyWith(clearDeadline: true),
-                        ),
+                    : () => setState(() {
+                        _draft = _draft.copyWith(clearDeadline: true);
+                        _updateDefaultReminder();
+                      }),
               ),
               const SizedBox(height: 12),
               _buildScheduleControl(
                 label: 'Reminder',
                 value: _draft.reminderAt == null
-                    ? 'Set a reminder'
-                    : DateFormat('EEE, MMM d · h:mm a')
-                        .format(_draft.reminderAt!),
+                    ? _reminderDisabled
+                          ? 'No reminder'
+                          : _defaultReminderLabel
+                    : '${_reminderCustomized ? 'Custom' : '30 min before'} · ${DateFormat('EEE, MMM d · h:mm a').format(_draft.reminderAt!)}',
                 icon: LucideIcons.bell,
                 onPressed: _chooseReminder,
-                onClear: _draft.reminderAt == null
+                onClear: _draft.reminderAt == null && !_reminderDisabled
                     ? null
-                    : () => setState(
-                          () => _draft = _draft.copyWith(clearReminder: true),
-                        ),
+                    : () => setState(() {
+                        _draft = _draft.copyWith(clearReminder: true);
+                        _reminderCustomized = true;
+                        _reminderDisabled = true;
+                      }),
+              ),
+              const SizedBox(height: 5),
+              Text(
+                'Defaults to 30 minutes before the exact start time. Tap to choose another time or clear to turn it off.',
+                style: CaliMindTypography.bodySmall.copyWith(
+                  color: CaliMindColors.mutedForeground,
+                ),
               ),
               const SizedBox(height: 24),
               // Confirm button
@@ -388,14 +484,20 @@ class _VoiceConfirmSheetState extends ConsumerState<VoiceConfirmSheet> {
                       backgroundColor: Colors.transparent,
                       shadowColor: Colors.transparent,
                       shape: RoundedRectangleBorder(
-                          borderRadius: BorderRadius.circular(14)),
+                        borderRadius: BorderRadius.circular(14),
+                      ),
                     ),
-                    icon: const Icon(LucideIcons.check,
-                        color: Colors.white, size: 18),
+                    icon: const Icon(
+                      LucideIcons.check,
+                      color: Colors.white,
+                      size: 18,
+                    ),
                     label: Text(
                       _isSaving ? 'Saving…' : 'Add Task',
                       style: CaliMindTypography.bodyMedium.copyWith(
-                          color: Colors.white, fontWeight: FontWeight.w600),
+                        color: Colors.white,
+                        fontWeight: FontWeight.w600,
+                      ),
                     ),
                   ),
                 ),
@@ -449,18 +551,22 @@ class _VoiceConfirmSheetState extends ConsumerState<VoiceConfirmSheet> {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        Text('Category',
-            style:
-                CaliMindTypography.label.copyWith(fontWeight: FontWeight.w600)),
+        Text(
+          'Category',
+          style: CaliMindTypography.label.copyWith(fontWeight: FontWeight.w600),
+        ),
         const SizedBox(height: 8),
         DropdownButtonFormField<TaskCategory>(
           initialValue: _draft.category,
           dropdownColor: CaliMindColors.card,
-          style: CaliMindTypography.bodySmall
-              .copyWith(color: CaliMindColors.foreground),
+          style: CaliMindTypography.bodySmall.copyWith(
+            color: CaliMindColors.foreground,
+          ),
           decoration: InputDecoration(
-            contentPadding:
-                const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+            contentPadding: const EdgeInsets.symmetric(
+              horizontal: 12,
+              vertical: 10,
+            ),
             filled: true,
             fillColor: CaliMindColors.background,
             border: OutlineInputBorder(
@@ -473,18 +579,23 @@ class _VoiceConfirmSheetState extends ConsumerState<VoiceConfirmSheet> {
             ),
           ),
           items: TaskCategory.values
-              .map((cat) => DropdownMenuItem(
-                    value: cat,
-                    child: Row(
-                      children: [
-                        Icon(cat.icon, size: 13, color: cat.color),
-                        const SizedBox(width: 6),
-                        Text(cat.label,
-                            style: CaliMindTypography.bodySmall
-                                .copyWith(color: CaliMindColors.foreground)),
-                      ],
-                    ),
-                  ))
+              .map(
+                (cat) => DropdownMenuItem(
+                  value: cat,
+                  child: Row(
+                    children: [
+                      Icon(cat.icon, size: 13, color: cat.color),
+                      const SizedBox(width: 6),
+                      Text(
+                        cat.label,
+                        style: CaliMindTypography.bodySmall.copyWith(
+                          color: CaliMindColors.foreground,
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              )
               .toList(),
           onChanged: (cat) {
             if (cat != null)
@@ -499,9 +610,10 @@ class _VoiceConfirmSheetState extends ConsumerState<VoiceConfirmSheet> {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        Text('Priority',
-            style:
-                CaliMindTypography.label.copyWith(fontWeight: FontWeight.w600)),
+        Text(
+          'Priority',
+          style: CaliMindTypography.label.copyWith(fontWeight: FontWeight.w600),
+        ),
         const SizedBox(height: 8),
         Row(
           children: [1, 2, 3].map((p) {
@@ -526,26 +638,31 @@ class _VoiceConfirmSheetState extends ConsumerState<VoiceConfirmSheet> {
                         : CaliMindColors.background,
                     borderRadius: BorderRadius.circular(10),
                     border: Border.all(
-                        color: isSelected ? color : CaliMindColors.cardBorder),
+                      color: isSelected ? color : CaliMindColors.cardBorder,
+                    ),
                   ),
                   alignment: Alignment.center,
                   child: Column(
                     children: [
-                      Text(label,
-                          style: CaliMindTypography.bodySmall.copyWith(
-                            color: isSelected
-                                ? color
-                                : CaliMindColors.mutedForeground,
-                            fontWeight: FontWeight.w700,
-                            fontSize: 11,
-                          )),
-                      Text(description,
-                          style: CaliMindTypography.bodySmall.copyWith(
-                            color: isSelected
-                                ? color
-                                : CaliMindColors.mutedForeground,
-                            fontSize: 9,
-                          )),
+                      Text(
+                        label,
+                        style: CaliMindTypography.bodySmall.copyWith(
+                          color: isSelected
+                              ? color
+                              : CaliMindColors.mutedForeground,
+                          fontWeight: FontWeight.w700,
+                          fontSize: 11,
+                        ),
+                      ),
+                      Text(
+                        description,
+                        style: CaliMindTypography.bodySmall.copyWith(
+                          color: isSelected
+                              ? color
+                              : CaliMindColors.mutedForeground,
+                          fontSize: 9,
+                        ),
+                      ),
                     ],
                   ),
                 ),
@@ -564,17 +681,22 @@ class _VoiceConfirmSheetState extends ConsumerState<VoiceConfirmSheet> {
       children: [
         Row(
           children: [
-            Text('Duration',
-                style: CaliMindTypography.label
-                    .copyWith(fontWeight: FontWeight.w600)),
+            Text(
+              'Duration',
+              style: CaliMindTypography.label.copyWith(
+                fontWeight: FontWeight.w600,
+              ),
+            ),
             const Spacer(),
             // Stepper
             _StepperButton(
               icon: LucideIcons.minus,
               onTap: () {
                 if (_draft.duration > 5)
-                  setState(() =>
-                      _draft = _draft.copyWith(duration: _draft.duration - 5));
+                  setState(
+                    () =>
+                        _draft = _draft.copyWith(duration: _draft.duration - 5),
+                  );
               },
             ),
             const SizedBox(width: 12),
@@ -587,8 +709,10 @@ class _VoiceConfirmSheetState extends ConsumerState<VoiceConfirmSheet> {
               icon: LucideIcons.plus,
               onTap: () {
                 if (_draft.duration < 480)
-                  setState(() =>
-                      _draft = _draft.copyWith(duration: _draft.duration + 5));
+                  setState(
+                    () =>
+                        _draft = _draft.copyWith(duration: _draft.duration + 5),
+                  );
               },
             ),
           ],
@@ -603,8 +727,10 @@ class _VoiceConfirmSheetState extends ConsumerState<VoiceConfirmSheet> {
               onTap: () =>
                   setState(() => _draft = _draft.copyWith(duration: d)),
               child: Container(
-                padding:
-                    const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+                padding: const EdgeInsets.symmetric(
+                  horizontal: 12,
+                  vertical: 6,
+                ),
                 decoration: BoxDecoration(
                   color: isSelected
                       ? CaliMindColors.primary.withValues(alpha: 0.15)

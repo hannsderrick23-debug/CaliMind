@@ -4,6 +4,7 @@ import 'package:flutter/foundation.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import 'package:supabase_flutter/supabase_flutter.dart' as supabase;
+import 'package:calimind/core/utils/network_error_utils.dart';
 import 'package:calimind/core/services/biometric_service.dart';
 import 'package:calimind/core/services/push_notification_service.dart';
 import 'package:calimind/core/services/widget_service.dart';
@@ -48,16 +49,16 @@ class AuthState {
     bool? biometricSetupPending,
   }) =>
       AuthState(
-        status: status ?? this.status,
-        user: user ?? this.user,
-        errorMessage: clearError ? null : (errorMessage ?? this.errorMessage),
-        successMessage:
-            clearSuccess ? null : (successMessage ?? this.successMessage),
-        isLoading: isLoading ?? this.isLoading,
-        isPasswordRecovery: isPasswordRecovery ?? this.isPasswordRecovery,
-        biometricSetupPending:
-            biometricSetupPending ?? this.biometricSetupPending,
-      );
+    status: status ?? this.status,
+    user: user ?? this.user,
+    errorMessage: clearError ? null : (errorMessage ?? this.errorMessage),
+      successMessage:
+        clearSuccess ? null : (successMessage ?? this.successMessage),
+    isLoading: isLoading ?? this.isLoading,
+    isPasswordRecovery: isPasswordRecovery ?? this.isPasswordRecovery,
+      biometricSetupPending:
+          biometricSetupPending ?? this.biometricSetupPending,
+  );
 }
 
 class AuthNotifier extends StateNotifier<AuthState> {
@@ -89,32 +90,32 @@ class AuthNotifier extends StateNotifier<AuthState> {
         state = const AuthState(status: AuthStatus.unauthenticated);
       }
 
-      _authSubscription =
+        _authSubscription =
           Supabase.instance.client.auth.onAuthStateChange.listen((event) {
-        final session = event.session;
-        if (session == null) {
-          _lockRestoredSession = false;
-          state = const AuthState(status: AuthStatus.unauthenticated);
-        } else if (event.event == supabase.AuthChangeEvent.initialSession &&
-            _lockRestoredSession) {
-          state = AuthState(
-            status: AuthStatus.biometricLocked,
-            user: session.user,
-          );
-        } else {
-          if (_passwordSignInInProgress &&
-              event.event == supabase.AuthChangeEvent.signedIn) {
-            return;
-          }
-          _lockRestoredSession = false;
-          state = AuthState(
-            status: AuthStatus.authenticated,
-            user: session.user,
-            isPasswordRecovery:
-                event.event == supabase.AuthChangeEvent.passwordRecovery,
-          );
-        }
-      });
+            final session = event.session;
+            if (session == null) {
+              _lockRestoredSession = false;
+              state = const AuthState(status: AuthStatus.unauthenticated);
+            } else if (event.event == supabase.AuthChangeEvent.initialSession &&
+                _lockRestoredSession) {
+              state = AuthState(
+                status: AuthStatus.biometricLocked,
+                user: session.user,
+              );
+            } else {
+              if (_passwordSignInInProgress &&
+                  event.event == supabase.AuthChangeEvent.signedIn) {
+                return;
+              }
+              _lockRestoredSession = false;
+              state = AuthState(
+                status: AuthStatus.authenticated,
+                user: session.user,
+                isPasswordRecovery:
+                    event.event == supabase.AuthChangeEvent.passwordRecovery,
+              );
+            }
+          });
     } catch (error) {
       state = AuthState(
         status: AuthStatus.unauthenticated,
@@ -153,10 +154,16 @@ class AuthNotifier extends StateNotifier<AuthState> {
             isLoading: false, errorMessage: 'Sign in did not return a user.');
       }
     } on AuthException catch (e) {
-      state = state.copyWith(isLoading: false, errorMessage: e.message);
+      state = state.copyWith(
+        isLoading: false,
+        errorMessage: networkErrorMessage(e) ?? e.message,
+      );
     } catch (e) {
       state = state.copyWith(
-          isLoading: false, errorMessage: 'Sign in failed. Please try again.');
+        isLoading: false,
+        errorMessage:
+            networkErrorMessage(e) ?? 'Sign in failed. Please try again.',
+      );
     } finally {
       _passwordSignInInProgress = false;
     }
@@ -240,10 +247,16 @@ class AuthNotifier extends StateNotifier<AuthState> {
             errorMessage: 'Account creation did not return a user.');
       }
     } on AuthException catch (e) {
-      state = state.copyWith(isLoading: false, errorMessage: e.message);
+      state = state.copyWith(
+        isLoading: false,
+        errorMessage: networkErrorMessage(e) ?? e.message,
+      );
     } catch (e) {
       state = state.copyWith(
-          isLoading: false, errorMessage: 'Sign up failed. Please try again.');
+        isLoading: false,
+        errorMessage:
+            networkErrorMessage(e) ?? 'Sign up failed. Please try again.',
+      );
     }
   }
 
@@ -264,11 +277,16 @@ class AuthNotifier extends StateNotifier<AuthState> {
         state = state.copyWith(isLoading: false);
       }
     } on AuthException catch (e) {
-      state = state.copyWith(isLoading: false, errorMessage: e.message);
-    } catch (_) {
       state = state.copyWith(
         isLoading: false,
-        errorMessage: '${provider.name} sign in failed. Please try again.',
+        errorMessage: networkErrorMessage(e) ?? e.message,
+      );
+    } catch (error) {
+      state = state.copyWith(
+        isLoading: false,
+        errorMessage:
+            networkErrorMessage(error) ??
+            '${provider.name} sign in failed. Please try again.',
       );
     }
   }
@@ -287,11 +305,16 @@ class AuthNotifier extends StateNotifier<AuthState> {
         successMessage: 'Password reset link sent. Check your email.',
       );
     } on AuthException catch (e) {
-      state = state.copyWith(isLoading: false, errorMessage: e.message);
-    } catch (_) {
       state = state.copyWith(
         isLoading: false,
-        errorMessage: 'Could not send the reset link. Please try again.',
+        errorMessage: networkErrorMessage(e) ?? e.message,
+      );
+    } catch (error) {
+      state = state.copyWith(
+        isLoading: false,
+        errorMessage:
+            networkErrorMessage(error) ??
+            'Could not send the reset link. Please try again.',
       );
     }
   }
@@ -307,11 +330,16 @@ class AuthNotifier extends StateNotifier<AuthState> {
         user: response.user,
       );
     } on AuthException catch (e) {
-      state = state.copyWith(isLoading: false, errorMessage: e.message);
-    } catch (_) {
       state = state.copyWith(
         isLoading: false,
-        errorMessage: 'Could not update your password. Please try again.',
+        errorMessage: networkErrorMessage(e) ?? e.message,
+      );
+    } catch (error) {
+      state = state.copyWith(
+        isLoading: false,
+        errorMessage:
+            networkErrorMessage(error) ??
+            'Could not update your password. Please try again.',
       );
     }
   }
@@ -337,11 +365,16 @@ class AuthNotifier extends StateNotifier<AuthState> {
         successMessage: 'Your profile has been updated.',
       );
     } on AuthException catch (error) {
-      state = state.copyWith(isLoading: false, errorMessage: error.message);
-    } catch (_) {
       state = state.copyWith(
         isLoading: false,
-        errorMessage: 'Could not update your profile. Please try again.',
+        errorMessage: networkErrorMessage(error) ?? error.message,
+      );
+    } catch (error) {
+      state = state.copyWith(
+        isLoading: false,
+        errorMessage:
+            networkErrorMessage(error) ??
+            'Could not update your profile. Please try again.',
       );
     }
   }
@@ -367,7 +400,9 @@ class AuthNotifier extends StateNotifier<AuthState> {
       debugPrint('Could not sign out from the remote auth session: $error');
       state = state.copyWith(
         isLoading: false,
-        errorMessage: 'Could not sign out. Please try again.',
+        errorMessage:
+            networkErrorMessage(error) ??
+            'Could not sign out. Please try again.',
       );
       return false;
     }

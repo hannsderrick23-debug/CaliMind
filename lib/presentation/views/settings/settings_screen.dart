@@ -13,6 +13,7 @@ import 'package:calimind/core/services/push_notification_service.dart';
 import 'package:calimind/core/services/task_reminder_service.dart';
 import 'package:calimind/core/services/widget_service.dart';
 import 'package:calimind/core/utils/app_feedback.dart';
+import 'package:calimind/core/utils/network_error_utils.dart';
 import 'package:calimind/data/datasources/audit_remote_datasource.dart';
 import 'package:calimind/domain/models/audit_log.dart';
 import 'package:calimind/presentation/state/auth_provider.dart';
@@ -80,7 +81,7 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
       setState(() => _aventorEyeEnabled = enabled);
       _showFeedback(
         enabled
-            ? 'Aventor Eye is on. Schedule snapshots are sent to Groq for insights.'
+            ? 'Aventor Eye is on. Schedule snapshots are sent to Aventor Eye for insights.'
             : 'Aventor Eye is off and its locally cached insights were removed.',
       );
     } catch (error) {
@@ -507,9 +508,19 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
   }
 
   Future<void> _loadAuditLogs() async {
-    final logs = await _auditDatasource.fetchAuditLogs(limit: 20);
-    if (mounted) {
-      setState(() => _auditLogs = logs);
+    try {
+      final logs = await _auditDatasource.fetchAuditLogs(limit: 20);
+      if (mounted) {
+        setState(() => _auditLogs = logs);
+      }
+    } catch (error) {
+      debugPrint('Could not load audit history: $error');
+      if (mounted) {
+        _showFeedback(
+          networkErrorMessage(error) ?? 'Could not load recent activity.',
+          isError: true,
+        );
+      }
     }
   }
 

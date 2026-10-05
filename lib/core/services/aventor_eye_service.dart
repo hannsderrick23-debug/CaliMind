@@ -80,31 +80,47 @@ class AventorEyeService {
   AventorEyeService._();
 
   static final instance = AventorEyeService._();
-  static const _enabledKey = 'aventor_eye_enabled';
+  static const _enabledKeyPrefix = 'aventor_eye_enabled_';
   static const _cachePrefix = 'aventor_eye_cache_';
   static const _latestCachePrefix = 'aventor_eye_latest_';
-  static const _lastRefreshKey = 'aventor_eye_last_refresh_at';
+  static const _lastRefreshKeyPrefix = 'aventor_eye_last_refresh_at_';
   static const refreshInterval = Duration(minutes: 10);
   static final ValueNotifier<bool?> enabled = ValueNotifier<bool?>(null);
+  static String? _enabledUserId;
 
   Future<bool> isEnabled() async {
+    final userId = Supabase.instance.client.auth.currentUser?.id;
+    if (userId == null) {
+      _enabledUserId = null;
+      enabled.value = false;
+      return false;
+    }
     final current = enabled.value;
-    if (current != null) return current;
+    if (current != null && _enabledUserId == userId) return current;
     final preferences = await SharedPreferences.getInstance();
-    final saved = preferences.getBool(_enabledKey) ?? false;
+    final saved = preferences.getBool('$_enabledKeyPrefix$userId') ?? false;
+    if (Supabase.instance.client.auth.currentUser?.id != userId) return false;
+    _enabledUserId = userId;
     enabled.value = saved;
     return saved;
   }
 
   Future<void> setEnabled(bool value) async {
+    final userId = Supabase.instance.client.auth.currentUser?.id;
+    if (userId == null) {
+      throw StateError('Sign in to update Aventor Eye settings.');
+    }
     final preferences = await SharedPreferences.getInstance();
-    await preferences.setBool(_enabledKey, value);
-    enabled.value = value;
+    await preferences.setBool('$_enabledKeyPrefix$userId', value);
+    if (Supabase.instance.client.auth.currentUser?.id == userId) {
+      _enabledUserId = userId;
+      enabled.value = value;
+    }
     if (!value) {
       for (final key in preferences.getKeys()) {
-        if (key.startsWith(_cachePrefix) ||
-            key.startsWith(_latestCachePrefix) ||
-            key == _lastRefreshKey) {
+        if (key.startsWith('$_cachePrefix${userId}_') ||
+            key.startsWith('$_latestCachePrefix${userId}_') ||
+            key == '$_lastRefreshKeyPrefix$userId') {
           await preferences.remove(key);
         }
       }
@@ -139,7 +155,8 @@ class AventorEyeService {
     if (!await isEnabled()) {
       throw StateError('Enable Aventor Eye in Settings to request insights.');
     }
-    if (Supabase.instance.client.auth.currentUser == null) {
+    final userId = Supabase.instance.client.auth.currentUser?.id;
+    if (userId == null) {
       throw StateError('Sign in to refresh Aventor Eye insights.');
     }
 
@@ -152,14 +169,17 @@ class AventorEyeService {
       now: localNow,
       busyIntervals: busyIntervals,
     );
-    final cacheKey =
-        '$_cachePrefix${_dateKey(localDate)}_'
-        '${_fingerprint(jsonEncode(snapshot))}';
-    final fingerprint = cacheKey.substring(
-      '$_cachePrefix${_dateKey(localDate)}_'.length,
-    );
-    final latestKey = '$_latestCachePrefix${_dateKey(localDate)}';
+    final requestContext = {
+      'local_date': snapshot['local_date'],
+      'local_time': snapshot['local_time'],
+      'busy_intervals': snapshot['busy_intervals'],
+    };
+    final scopedDatePrefix = '$_cachePrefix${userId}_${_dateKey(localDate)}_';
+    final fingerprint = _fingerprint(jsonEncode(snapshot));
+    final cacheKey = '$scopedDatePrefix$fingerprint';
+    final latestKey = '$_latestCachePrefix${userId}_${_dateKey(localDate)}';
     final preferences = await SharedPreferences.getInstance();
+    await _removeUnscopedLegacyCache(preferences);
     if (!forceRefresh) {
       final cached = preferences.getString(cacheKey);
       if (cached != null) {
@@ -167,11 +187,9 @@ class AventorEyeService {
       }
     }
 
-    final latest =
-        _readLatest(preferences.getString(latestKey)) ??
-        _readLegacyLatest(preferences, localDate);
+    final latest = _readLatest(preferences.getString(latestKey));
     final lastRefresh = DateTime.tryParse(
-      preferences.getString(_lastRefreshKey) ?? '',
+      preferences.getString('$_lastRefreshKeyPrefix$userId') ?? '',
     )?.toLocal();
     final latestRefresh = latest?.fetchedAt;
     final mostRecentRefresh =
@@ -194,12 +212,18 @@ class AventorEyeService {
       }
     }
 
-    await preferences.setString(_lastRefreshKey, localNow.toIso8601String());
+    await preferences.setString(
+      '$_lastRefreshKeyPrefix$userId',
+      localNow.toIso8601String(),
+    );
+    if (Supabase.instance.client.auth.currentUser?.id != userId) {
+      throw StateError('The signed-in account changed before Aventor Eye ran.');
+    }
     late final List<AventorEyeInsight> cards;
     try {
       final response = await Supabase.instance.client.functions.invoke(
         'aventor-eye',
-        body: snapshot,
+        body: requestContext,
       );
       final data = response.data;
       if (data is! Map || data['cards'] is! List) {
@@ -217,8 +241,13 @@ class AventorEyeService {
         refreshFailed: true,
       );
     }
+    if (Supabase.instance.client.auth.currentUser?.id != userId) {
+      throw StateError(
+        'The signed-in account changed while Aventor Eye was refreshing.',
+      );
+    }
 
-    final dayPrefix = '$_cachePrefix${_dateKey(localDate)}_';
+    final dayPrefix = scopedDatePrefix;
     for (final key in preferences.getKeys()) {
       if (key.startsWith(dayPrefix) && key != cacheKey) {
         await preferences.remove(key);
@@ -239,6 +268,26 @@ class AventorEyeService {
     return AventorEyeResult(cards: cards, isStale: false);
   }
 
+  Future<void> _removeUnscopedLegacyCache(SharedPreferences preferences) async {
+    for (final key in preferences.getKeys()) {
+      final isLegacyCache =
+          key.startsWith(_cachePrefix) &&
+          RegExp(
+            r'^\d{4}-\d{2}-\d{2}_',
+          ).hasMatch(key.substring(_cachePrefix.length));
+      final isLegacyLatest =
+          key.startsWith(_latestCachePrefix) &&
+          RegExp(
+            r'^\d{4}-\d{2}-\d{2}$',
+          ).hasMatch(key.substring(_latestCachePrefix.length));
+      if (isLegacyCache ||
+          isLegacyLatest ||
+          key == 'aventor_eye_last_refresh_at') {
+        await preferences.remove(key);
+      }
+    }
+  }
+
   _CachedAventorEyeResult? _readLatest(String? encoded) {
     if (encoded == null) return null;
     final decoded = jsonDecode(encoded);
@@ -253,24 +302,6 @@ class AventorEyeService {
       fetchedAt: DateTime.parse(decoded['fetched_at'] as String).toLocal(),
       cards: _decodeCards(jsonEncode(decoded['cards'])),
     );
-  }
-
-  _CachedAventorEyeResult? _readLegacyLatest(
-    SharedPreferences preferences,
-    DateTime date,
-  ) {
-    final prefix = '$_cachePrefix${_dateKey(date)}_';
-    for (final key in preferences.getKeys()) {
-      if (!key.startsWith(prefix)) continue;
-      final encoded = preferences.getString(key);
-      if (encoded == null) continue;
-      return _CachedAventorEyeResult(
-        snapshotFingerprint: key.substring(prefix.length),
-        fetchedAt: DateTime.fromMillisecondsSinceEpoch(0),
-        cards: _decodeCards(encoded),
-      );
-    }
-    return null;
   }
 
   List<AventorEyeInsight> _decodeCards(String encoded) {
@@ -300,8 +331,11 @@ class AventorEyeService {
     required List<CalendarBusyInterval> busyIntervals,
   }) {
     final dateKey = _dateKey(date);
+    final userId = Supabase.instance.client.auth.currentUser?.id;
+    final ownedTasks = tasks.where((task) => task.userId == userId).toList();
+    final taskIds = ownedTasks.map((task) => task.id).toSet();
     final relevantTasks =
-        tasks.where((task) {
+        ownedTasks.where((task) {
           if (task.completed) return false;
           final deadline = task.deadline?.toLocal();
           return deadline == null || _dateKey(deadline).compareTo(dateKey) <= 0;
@@ -339,6 +373,7 @@ class AventorEyeService {
           })
           .toList(growable: false),
       'schedule': slots
+          .where((slot) => taskIds.contains(slot.taskId))
           .take(40)
           .map((slot) {
             final title = slot.taskTitle.trim();

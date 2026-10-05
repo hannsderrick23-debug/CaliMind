@@ -12,6 +12,7 @@ import '../../core/services/device_calendar_service.dart';
 import '../../domain/models/calendar_busy_interval.dart';
 import '../../domain/models/schedule_slot.dart';
 import '../../domain/models/task.dart';
+import '../state/auth_provider.dart';
 import '../state/device_calendar_provider.dart';
 
 class AventorEyeFeed extends ConsumerStatefulWidget {
@@ -42,12 +43,13 @@ class _AventorEyeFeedState extends ConsumerState<AventorEyeFeed> {
   String? _requestedKey;
   DateTime? _snapshotTime;
   Timer? _refreshTimer;
+  int _userGeneration = 0;
 
   @override
   void initState() {
     super.initState();
     AventorEyeService.enabled.addListener(_onPreferenceChanged);
-    unawaited(_loadPreference());
+    unawaited(_loadPreference(userGeneration: _userGeneration));
   }
 
   @override
@@ -71,10 +73,10 @@ class _AventorEyeFeedState extends ConsumerState<AventorEyeFeed> {
     }
   }
 
-  Future<void> _loadPreference() async {
+  Future<void> _loadPreference({required int userGeneration}) async {
     try {
       final enabled = await AventorEyeService.instance.isEnabled();
-      if (!mounted) return;
+      if (!mounted || userGeneration != _userGeneration) return;
       setState(() {
         _enabled = enabled;
         _loadingPreference = false;
@@ -82,7 +84,7 @@ class _AventorEyeFeedState extends ConsumerState<AventorEyeFeed> {
       _requestIfNeeded();
     } catch (error) {
       debugPrint('Could not load Aventor Eye preference: $error');
-      if (mounted) {
+      if (mounted && userGeneration == _userGeneration) {
         setState(() {
           _loadingPreference = false;
           _error = 'Could not load Aventor Eye settings.';
@@ -120,11 +122,18 @@ class _AventorEyeFeedState extends ConsumerState<AventorEyeFeed> {
     if (!forceRefresh && key == _requestedKey) return;
     _requestedKey = key;
     _snapshotTime = now;
-    unawaited(_loadInsights(now: now, forceRefresh: forceRefresh));
+    unawaited(
+      _loadInsights(
+        now: now,
+        forceRefresh: forceRefresh,
+        userGeneration: _userGeneration,
+      ),
+    );
   }
 
   Future<void> _loadInsights({
     required DateTime now,
+    required int userGeneration,
     bool forceRefresh = false,
   }) async {
     setState(() {
@@ -144,6 +153,7 @@ class _AventorEyeFeedState extends ConsumerState<AventorEyeFeed> {
         }
         busyIntervals = busyResult.intervals;
       }
+      if (!mounted || userGeneration != _userGeneration) return;
       final result = await AventorEyeService.instance.getInsights(
         tasks: widget.tasks,
         slots: widget.slots,
@@ -152,21 +162,21 @@ class _AventorEyeFeedState extends ConsumerState<AventorEyeFeed> {
         busyIntervals: busyIntervals,
         forceRefresh: forceRefresh,
       );
-      if (!mounted) return;
+      if (!mounted || userGeneration != _userGeneration) return;
       setState(() {
         _cards = result.cards;
         _loading = false;
         _error = null;
         _cacheNotice = result.isStale
             ? result.refreshFailed
-                ? 'Refresh failed. Showing saved insights for now.'
-                : 'Showing saved insights until the next refresh.'
+                  ? 'Refresh failed. Showing saved insights for now.'
+                  : 'Showing saved insights until the next refresh.'
             : null;
       });
       _scheduleNextRefresh(_refreshInterval);
     } catch (error) {
       debugPrint('Aventor Eye could not load schedule insights: $error');
-      if (!mounted) return;
+      if (!mounted || userGeneration != _userGeneration) return;
       setState(() {
         _loading = false;
         _error =
@@ -179,6 +189,22 @@ class _AventorEyeFeedState extends ConsumerState<AventorEyeFeed> {
       });
       _scheduleNextRefresh(_refreshInterval);
     }
+  }
+
+  void _handleAccountChange() {
+    _userGeneration++;
+    _refreshTimer?.cancel();
+    _requestedKey = null;
+    _snapshotTime = null;
+    setState(() {
+      _enabled = null;
+      _loading = false;
+      _loadingPreference = true;
+      _error = null;
+      _cacheNotice = null;
+      _cards = const [];
+    });
+    unawaited(_loadPreference(userGeneration: _userGeneration));
   }
 
   void _scheduleNextRefresh(Duration delay) {
@@ -205,6 +231,9 @@ class _AventorEyeFeedState extends ConsumerState<AventorEyeFeed> {
 
   @override
   Widget build(BuildContext context) {
+    ref.listen(authProvider.select((auth) => auth.user?.id), (previous, next) {
+      if (previous != next) _handleAccountChange();
+    });
     _requestIfNeeded();
     if (_loadingPreference) return const SizedBox.shrink();
     if (_enabled != true) {

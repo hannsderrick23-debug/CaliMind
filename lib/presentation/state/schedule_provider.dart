@@ -1,11 +1,13 @@
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:calimind/core/utils/date_time_utils.dart';
+import 'package:calimind/core/utils/network_error_utils.dart';
 import 'package:calimind/core/services/widget_service.dart';
 import 'package:calimind/data/repositories/schedule_repository_impl.dart';
 import 'package:calimind/domain/models/schedule_slot.dart';
 import 'package:calimind/domain/models/calendar_busy_interval.dart';
 import 'package:calimind/domain/models/task.dart';
 import 'package:calimind/domain/use_cases/generate_schedule_use_case.dart';
+import 'package:calimind/presentation/state/auth_provider.dart';
 
 class ScheduleDraft {
   final String date;
@@ -52,15 +54,15 @@ class ScheduleState {
     bool clearError = false,
   }) =>
       ScheduleState(
-        slots: slots ?? this.slots,
-        monthSlots: monthSlots ?? this.monthSlots,
-        unscheduled: unscheduled ?? this.unscheduled,
-        activeDate: activeDate ?? this.activeDate,
-        calendarMonth: calendarMonth ?? this.calendarMonth,
-        isGenerating: isGenerating ?? this.isGenerating,
-        isLoaded: isLoaded ?? this.isLoaded,
-        errorMessage: clearError ? null : (errorMessage ?? this.errorMessage),
-      );
+    slots: slots ?? this.slots,
+    monthSlots: monthSlots ?? this.monthSlots,
+    unscheduled: unscheduled ?? this.unscheduled,
+    activeDate: activeDate ?? this.activeDate,
+    calendarMonth: calendarMonth ?? this.calendarMonth,
+    isGenerating: isGenerating ?? this.isGenerating,
+    isLoaded: isLoaded ?? this.isLoaded,
+    errorMessage: clearError ? null : (errorMessage ?? this.errorMessage),
+  );
 }
 
 class ScheduleNotifier extends StateNotifier<ScheduleState> {
@@ -72,12 +74,12 @@ class ScheduleNotifier extends StateNotifier<ScheduleState> {
     this._repo, {
     GenerateScheduleUseCase? scheduler,
     DateTime Function()? clock,
-  })  : _scheduler = scheduler ?? GenerateScheduleUseCase(),
-        _clock = clock ?? DateTime.now,
-        super(ScheduleState(
-          activeDate: DateTime.now(),
-          calendarMonth: DateTime(DateTime.now().year, DateTime.now().month),
-        )) {
+  }) : _scheduler = scheduler ?? GenerateScheduleUseCase(),
+       _clock = clock ?? DateTime.now,
+       super(ScheduleState(
+           activeDate: DateTime.now(),
+           calendarMonth: DateTime(DateTime.now().year, DateTime.now().month),
+       )) {
     loadScheduleForDate(DateTimeUtils.toIsoDate(DateTime.now()));
     loadScheduleForMonth(DateTime.now());
   }
@@ -106,7 +108,9 @@ class ScheduleNotifier extends StateNotifier<ScheduleState> {
       if (state.calendarMonth.year == normalizedMonth.year &&
           state.calendarMonth.month == normalizedMonth.month) {
         state = state.copyWith(
-          errorMessage: 'Could not load calendar schedule: $error',
+          errorMessage:
+              networkErrorMessage(error) ??
+              'Could not load calendar schedule: $error',
         );
       }
     }
@@ -127,7 +131,9 @@ class ScheduleNotifier extends StateNotifier<ScheduleState> {
       state = state.copyWith(
         isGenerating: false,
         isLoaded: true,
-        errorMessage: 'Could not load schedule for $date: $error',
+        errorMessage:
+            networkErrorMessage(error) ??
+            'Could not load schedule for $date: $error',
       );
     }
   }
@@ -167,10 +173,10 @@ class ScheduleNotifier extends StateNotifier<ScheduleState> {
     final now = targetTime.toLocal();
     final targetMinute = DateTimeUtils.toIsoDate(now) == date
         ? now.hour * 60 +
-            now.minute +
-            (now.second > 0 || now.millisecond > 0 || now.microsecond > 0
-                ? 1
-                : 0)
+              now.minute +
+              (now.second > 0 || now.millisecond > 0 || now.microsecond > 0
+                  ? 1
+                  : 0)
         : 0;
     final taskIds = incompleteTasks.map((task) => task.id).toSet();
     final preservedSlots = state.slots.where((slot) {
@@ -198,10 +204,10 @@ class ScheduleNotifier extends StateNotifier<ScheduleState> {
     List<Task> tasks = const [],
   }) =>
       _saveSchedule(
-        ScheduleResult(slots: slots, unscheduled: unscheduled),
-        draft.date,
-        tasks,
-      );
+    ScheduleResult(slots: slots, unscheduled: unscheduled),
+    draft.date,
+    tasks,
+  );
 
   List<Task> _tasksForDate(List<Task> tasks, String date) =>
       tasks.where((task) {
@@ -294,8 +300,10 @@ final scheduleRepositoryProvider = Provider<ScheduleRepositoryImpl>(
   (ref) => ScheduleRepositoryImpl(),
 );
 
-final scheduleProvider =
-    StateNotifierProvider<ScheduleNotifier, ScheduleState>((ref) {
-  final repo = ref.watch(scheduleRepositoryProvider);
-  return ScheduleNotifier(repo);
-});
+final scheduleProvider = StateNotifierProvider<ScheduleNotifier, ScheduleState>(
+  (ref) {
+    ref.watch(authProvider.select((auth) => auth.user?.id));
+    final repo = ref.watch(scheduleRepositoryProvider);
+    return ScheduleNotifier(repo);
+  },
+);

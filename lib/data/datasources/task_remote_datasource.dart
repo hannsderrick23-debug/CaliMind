@@ -13,16 +13,17 @@ abstract class TaskRemoteDatasource {
 }
 
 class TaskRemoteDatasourceImpl implements TaskRemoteDatasource {
-  SupabaseClient _requireClient() {
+  ({SupabaseClient client, String userId}) _requireSession() {
     try {
       if (!SupabaseConfig.isConfigured) {
         throw StateError('Supabase is not configured for this app.');
       }
       final client = Supabase.instance.client;
-      if (client.auth.currentUser == null) {
+      final user = client.auth.currentUser;
+      if (user == null) {
         throw StateError('Sign in before accessing your tasks.');
       }
-      return client;
+      return (client: client, userId: user.id);
     } on StateError {
       rethrow;
     } catch (error) {
@@ -33,9 +34,11 @@ class TaskRemoteDatasourceImpl implements TaskRemoteDatasource {
   @override
   Future<List<Task>> fetchTasks({int? retentionDays}) async {
     try {
-      final rows = await _requireClient()
+      final session = _requireSession();
+      final rows = await session.client
           .from('tasks')
           .select()
+          .eq('user_id', session.userId)
           .order('created_at', ascending: false);
       final tasks = rows.map((row) => Task.fromJson(row)).toList();
       if (retentionDays == null) return tasks;
@@ -56,14 +59,10 @@ class TaskRemoteDatasourceImpl implements TaskRemoteDatasource {
   @override
   Future<Task> createTask(NewTask newTask) async {
     try {
-      final client = _requireClient();
-      final user = client.auth.currentUser;
-      if (user == null) {
-        throw StateError('Sign in before saving a task to your account.');
-      }
-      final response = await client
+      final session = _requireSession();
+      final response = await session.client
           .from('tasks')
-          .insert(newTask.toInsertJson(user.id))
+          .insert(newTask.toInsertJson(session.userId))
           .select()
           .single();
       return Task.fromJson(response);
@@ -76,10 +75,12 @@ class TaskRemoteDatasourceImpl implements TaskRemoteDatasource {
   @override
   Future<Task> updateTask(Task task) async {
     try {
-      final response = await _requireClient()
+      final session = _requireSession();
+      final response = await session.client
           .from('tasks')
           .update(task.toJson())
           .eq('id', task.id)
+          .eq('user_id', session.userId)
           .select()
           .single();
       return Task.fromJson(response);
@@ -92,7 +93,12 @@ class TaskRemoteDatasourceImpl implements TaskRemoteDatasource {
   @override
   Future<void> deleteTask(String id) async {
     try {
-      await _requireClient().from('tasks').delete().eq('id', id);
+      final session = _requireSession();
+      await session.client
+          .from('tasks')
+          .delete()
+          .eq('id', id)
+          .eq('user_id', session.userId);
     } catch (error, stackTrace) {
       debugPrint('Could not delete task from Supabase: $error');
       Error.throwWithStackTrace(error, stackTrace);
@@ -102,7 +108,7 @@ class TaskRemoteDatasourceImpl implements TaskRemoteDatasource {
   @override
   Future<Task> toggleTaskCompletion(String id, bool completed) async {
     try {
-      final response = await _requireClient().rpc(
+      final response = await _requireSession().client.rpc(
         'complete_task',
         params: {'p_task_id': id, 'p_completed': completed},
       ).single();
@@ -116,10 +122,12 @@ class TaskRemoteDatasourceImpl implements TaskRemoteDatasource {
   @override
   Future<int> purgeCompletedTasks(int retentionDays) async {
     try {
+      final session = _requireSession();
       final cutoff = DateTime.now().subtract(Duration(days: retentionDays));
-      final response = await _requireClient()
+      final response = await session.client
           .from('tasks')
           .delete()
+          .eq('user_id', session.userId)
           .eq('completed', true)
           .lt('completed_at', cutoff.toIso8601String())
           .select('id');

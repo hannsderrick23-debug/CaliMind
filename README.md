@@ -36,13 +36,17 @@ adjust your plan as priorities change.
 - **Focus sessions** — use a built-in timer to give one task your attention.
 - **Progress insights** — review weekly progress and recognize steady effort.
 - **Aventor Eye** — opt in to short, AI-generated schedule insights. Task titles
-  and timing are sent to Groq only while this feature is enabled; calendar busy
-  times are included only when calendar access is separately enabled. Generated
-  insights are cached on the device and refresh automatically as plans change
-  and every 10 minutes while the dashboard is open, with a 10-minute request
-  cooldown to limit Groq usage.
+  and timing are loaded by the authenticated Edge Function from only that
+  account's RLS-protected records and sent to Groq only while this feature is
+  enabled; calendar busy times are included only when calendar access is
+  separately enabled. Generated insights are cached separately per account on
+  the device and refresh automatically as plans change and every 10 minutes
+  while the dashboard is open, with a 10-minute request cooldown to limit Groq
+  usage.
 - **Reminders and notifications** — configure device notifications and reminder
-  sounds for tasks and schedule updates.
+  sounds for tasks and schedule updates. Local reminders can fire while the app
+  is closed; queued cloud push reminders require the Supabase Cron dispatcher
+  configured as described in `supabase/PUSH_NOTIFICATIONS.md`.
 - **Phone Clock alarms** — optionally open Android Clock with a task time
   prefilled, then review and confirm the alarm in Clock. This is separate from
   task-date notifications.

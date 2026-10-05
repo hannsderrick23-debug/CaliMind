@@ -20,12 +20,12 @@ function jsonResponse(body: unknown, status = 200): Response {
   });
 }
 
-async function authenticateUser(request: Request): Promise<boolean> {
+async function authenticateUser(request: Request): Promise<string | null> {
   const authorization = request.headers.get("Authorization");
   const supabaseUrl = Deno.env.get("SUPABASE_URL");
   const supabaseKey = Deno.env.get("SUPABASE_ANON_KEY");
   if (!authorization?.startsWith("Bearer ") || !supabaseUrl || !supabaseKey) {
-    return false;
+    return null;
   }
 
   const response = await fetch(`${supabaseUrl}/auth/v1/user`, {
@@ -34,7 +34,9 @@ async function authenticateUser(request: Request): Promise<boolean> {
       Authorization: authorization,
     },
   });
-  return response.ok;
+  if (!response.ok) return null;
+  const user = await response.json() as { id?: unknown };
+  return typeof user.id === "string" ? user.id : null;
 }
 
 function isRecord(value: unknown): value is JsonRecord {
@@ -117,6 +119,115 @@ function validateSnapshot(body: JsonRecord): string | null {
     }
   }
   return null;
+}
+
+function validateRequestContext(body: JsonRecord): string | null {
+  if (
+    !boundedString(body.local_date, 10) ||
+    !/^\d{4}-\d{2}-\d{2}$/.test(body.local_date) ||
+    !validTime(body.local_time)
+  ) {
+    return "A valid local date and time are required.";
+  }
+  if (
+    !Array.isArray(body.busy_intervals) ||
+    body.busy_intervals.length > maxBusyIntervals
+  ) {
+    return `At most ${maxBusyIntervals} calendar busy intervals may be analyzed.`;
+  }
+  for (const interval of body.busy_intervals) {
+    if (
+      !isRecord(interval) ||
+      !validTime(interval.start_time) ||
+      !validTime(interval.end_time)
+    ) {
+      return "A calendar busy interval in the snapshot is invalid.";
+    }
+  }
+  return null;
+}
+
+function userRestHeaders(authorization: string): HeadersInit {
+  const key = Deno.env.get("SUPABASE_ANON_KEY");
+  if (!key) throw new Error("Supabase is not configured.");
+  return { apikey: key, Authorization: authorization };
+}
+
+async function fetchUserPlan(
+  userId: string,
+  authorization: string,
+  localDate: string,
+): Promise<{ tasks: JsonRecord[]; schedule: JsonRecord[] }> {
+  const supabaseUrl = Deno.env.get("SUPABASE_URL");
+  if (!supabaseUrl) throw new Error("Supabase is not configured.");
+
+  const tasksUrl = new URL(`${supabaseUrl}/rest/v1/tasks`);
+  tasksUrl.searchParams.set(
+    "select",
+    "title,category,duration,priority,deadline,reminder_at,specific_time",
+  );
+  tasksUrl.searchParams.set("user_id", `eq.${userId}`);
+  tasksUrl.searchParams.set("completed", "eq.false");
+  tasksUrl.searchParams.set("order", "priority.asc,deadline.asc.nullslast");
+  tasksUrl.searchParams.set("limit", String(maxTasks));
+
+  const scheduleUrl = new URL(`${supabaseUrl}/rest/v1/schedule_blocks`);
+  scheduleUrl.searchParams.set(
+    "select",
+    "start_time,end_time,tasks!inner(title,category,duration)",
+  );
+  scheduleUrl.searchParams.set("user_id", `eq.${userId}`);
+  scheduleUrl.searchParams.set("schedule_date", `eq.${localDate}`);
+  scheduleUrl.searchParams.set("order", "start_time.asc");
+  scheduleUrl.searchParams.set("limit", String(maxScheduleBlocks));
+
+  const headers = userRestHeaders(authorization);
+  const [tasksResponse, scheduleResponse] = await Promise.all([
+    fetch(tasksUrl, { headers }),
+    fetch(scheduleUrl, { headers }),
+  ]);
+  if (!tasksResponse.ok || !scheduleResponse.ok) {
+    console.error("Aventor Eye could not load the authenticated user's plan", {
+      tasksStatus: tasksResponse.status,
+      scheduleStatus: scheduleResponse.status,
+    });
+    throw new Error("Could not load the authenticated user's plan.");
+  }
+
+  const taskRows = await tasksResponse.json() as unknown;
+  const scheduleRows = await scheduleResponse.json() as unknown;
+  if (!Array.isArray(taskRows) || !Array.isArray(scheduleRows)) {
+    throw new Error("The authenticated user's plan is invalid.");
+  }
+  const tasks = taskRows.map((row: unknown) => {
+    if (!isRecord(row)) throw new Error("A task row is invalid.");
+    return {
+      title: row.title,
+      category: row.category,
+      duration_minutes: row.duration,
+      priority: row.priority,
+      deadline: row.deadline,
+      reminder_at: row.reminder_at,
+      specific_time: row.specific_time,
+    };
+  });
+  const schedule = scheduleRows.map((row: unknown) => {
+    if (!isRecord(row) || !isRecord(row.tasks)) {
+      throw new Error("A schedule row is invalid.");
+    }
+    const task = row.tasks;
+    return {
+      title: task.title,
+      category: task.category,
+      start_time: typeof row.start_time === "string"
+        ? row.start_time.slice(0, 5)
+        : row.start_time,
+      end_time: typeof row.end_time === "string"
+        ? row.end_time.slice(0, 5)
+        : row.end_time,
+    };
+  });
+  return { tasks, schedule };
 }
 
 async function createInsights(
@@ -277,7 +388,8 @@ Deno.serve(async (request: Request): Promise<Response> => {
   }
 
   try {
-    if (!await authenticateUser(request)) {
+    const userId = await authenticateUser(request);
+    if (!userId) {
       return jsonResponse({ error: "Authentication required." }, 401);
     }
     const apiKey = Deno.env.get("GROQ_API_KEY");
@@ -297,7 +409,21 @@ Deno.serve(async (request: Request): Promise<Response> => {
     if (!isRecord(body)) {
       return jsonResponse({ error: "A schedule snapshot is required." }, 400);
     }
-    return await createInsights(body, apiKey);
+    const contextError = validateRequestContext(body);
+    if (contextError) return jsonResponse({ error: contextError }, 400);
+    const authorization = request.headers.get("Authorization");
+    if (!authorization) {
+      return jsonResponse({ error: "Authentication required." }, 401);
+    }
+    const plan = await fetchUserPlan(userId, authorization, body.local_date as string);
+    const snapshot = {
+      local_date: body.local_date,
+      local_time: body.local_time,
+      tasks: plan.tasks,
+      schedule: plan.schedule,
+      busy_intervals: body.busy_intervals,
+    };
+    return await createInsights(snapshot, apiKey);
   } catch (error) {
     console.error("Aventor Eye request failed:", error);
     return jsonResponse({ error: "Aventor Eye could not complete the request." }, 500);

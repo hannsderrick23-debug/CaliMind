@@ -5,6 +5,7 @@ import 'package:intl/intl.dart';
 import 'package:lucide_icons_flutter/lucide_icons.dart';
 import 'package:calimind/core/constants/app_colors.dart';
 import 'package:calimind/core/constants/app_typography.dart';
+import 'package:calimind/core/utils/task_reminder_utils.dart';
 import 'package:calimind/core/utils/haptic_feedback_utils.dart';
 import 'package:calimind/core/utils/app_feedback.dart';
 import 'package:calimind/core/services/task_reminder_service.dart';
@@ -32,6 +33,9 @@ class _TaskInputSheetState extends ConsumerState<TaskInputSheet> {
   String? _specificTime;
   DateTime? _deadline;
   DateTime? _reminderAt;
+  bool _reminderCustomized = false;
+  bool _reminderDisabled = false;
+  bool _showDefaultReminder = false;
   TaskRecurrence? _recurrence;
   bool _isSaving = false;
   bool _allowExit = false;
@@ -78,6 +82,14 @@ class _TaskInputSheetState extends ConsumerState<TaskInputSheet> {
       _specificTime = t.specificTime;
       _deadline = t.deadline;
       _reminderAt = t.reminderAt;
+      final defaultReminder = defaultTaskReminderAt(
+        specificTime: t.specificTime,
+        deadline: t.deadline,
+      );
+      _reminderCustomized =
+          t.reminderAt != null && t.reminderAt != defaultReminder;
+      _showDefaultReminder =
+          t.reminderAt != null && t.reminderAt == defaultReminder;
       _recurrence = t.recurrence;
     }
   }
@@ -106,8 +118,9 @@ class _TaskInputSheetState extends ConsumerState<TaskInputSheet> {
     if (_isEditing) {
       final updated = widget.taskToEdit!.copyWith(
         title: title,
-        description:
-            _descCtrl.text.trim().isEmpty ? null : _descCtrl.text.trim(),
+        description: _descCtrl.text.trim().isEmpty
+            ? null
+            : _descCtrl.text.trim(),
         category: _category,
         duration: _duration,
         priority: _priority,
@@ -126,19 +139,24 @@ class _TaskInputSheetState extends ConsumerState<TaskInputSheet> {
         taskId = updated.id;
       }
     } else {
-      final created = await ref.read(taskProvider.notifier).createTask(NewTask(
-            title: title,
-            description:
-                _descCtrl.text.trim().isEmpty ? null : _descCtrl.text.trim(),
-            category: _category,
-            duration: _duration,
-            priority: _priority,
-            preferredTime: _preferredTime,
-            specificTime: _specificTime,
-            deadline: _deadline,
-            reminderAt: _reminderAt,
-            recurrence: _recurrence,
-          ));
+      final created = await ref
+          .read(taskProvider.notifier)
+          .createTask(
+            NewTask(
+              title: title,
+              description: _descCtrl.text.trim().isEmpty
+                  ? null
+                  : _descCtrl.text.trim(),
+              category: _category,
+              duration: _duration,
+              priority: _priority,
+              preferredTime: _preferredTime,
+              specificTime: _specificTime,
+              deadline: _deadline,
+              reminderAt: _reminderAt,
+              recurrence: _recurrence,
+            ),
+          );
       taskId = created?.id;
     }
 
@@ -158,8 +176,10 @@ class _TaskInputSheetState extends ConsumerState<TaskInputSheet> {
 
     await WidgetService.refresh(
       ref.read(taskProvider).valueOrNull ?? const <Task>[],
-      scheduledTaskIds:
-          ref.read(scheduleProvider).slots.map((slot) => slot.taskId),
+      scheduledTaskIds: ref
+          .read(scheduleProvider)
+          .slots
+          .map((slot) => slot.taskId),
     );
 
     final reminders = TaskReminderService();
@@ -257,6 +277,7 @@ class _TaskInputSheetState extends ConsumerState<TaskInputSheet> {
       setState(() {
         _specificTime =
             '${selected.hour.toString().padLeft(2, '0')}:${selected.minute.toString().padLeft(2, '0')}';
+        _updateDefaultReminder();
       });
     }
   }
@@ -278,18 +299,47 @@ class _TaskInputSheetState extends ConsumerState<TaskInputSheet> {
           23,
           59,
         );
+        _updateDefaultReminder();
       });
     }
   }
 
+  String get _defaultReminderLabel {
+    final reminder = defaultTaskReminderAt(
+      specificTime: _specificTime,
+      deadline: _deadline,
+    );
+    return reminder == null
+        ? 'Set a reminder'
+        : '30 min before · ${DateFormat('EEE, MMM d · h:mm a').format(reminder)}';
+  }
+
+  void _updateDefaultReminder() {
+    if (_reminderCustomized || _reminderDisabled) return;
+    _showDefaultReminder = true;
+    _reminderAt = defaultTaskReminderAt(
+      specificTime: _specificTime,
+      deadline: _deadline,
+    );
+  }
+
   Future<void> _selectReminder() async {
-    final initial = _reminderAt ?? DateTime.now().add(const Duration(hours: 1));
+    final initial =
+        _reminderAt ??
+        defaultTaskReminderAt(
+          specificTime: _specificTime,
+          deadline: _deadline,
+        ) ??
+        DateTime.now().add(const Duration(hours: 1));
     final now = DateTime.now();
     final initialDate = initial.isBefore(now) ? now : initial;
     final selectedDate = await showDatePicker(
       context: context,
-      initialDate:
-          DateTime(initialDate.year, initialDate.month, initialDate.day),
+      initialDate: DateTime(
+        initialDate.year,
+        initialDate.month,
+        initialDate.day,
+      ),
       firstDate: DateTime.now(),
       lastDate: DateTime.now().add(const Duration(days: 3650)),
     );
@@ -308,6 +358,8 @@ class _TaskInputSheetState extends ConsumerState<TaskInputSheet> {
           selectedTime.hour,
           selectedTime.minute,
         );
+        _reminderCustomized = true;
+        _reminderDisabled = false;
       });
     }
   }
@@ -320,213 +372,238 @@ class _TaskInputSheetState extends ConsumerState<TaskInputSheet> {
         if (!didPop) _requestClose();
       },
       child: Container(
-      decoration: const BoxDecoration(
-        color: CaliMindColors.card,
-        borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
-      ),
-      padding: EdgeInsets.only(
-        top: 20,
-        left: 24,
-        right: 24,
-        bottom: MediaQuery.of(context).viewInsets.bottom + 28,
-      ),
-      child: SingleChildScrollView(
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            // Handle bar
-            Center(
-              child: Container(
-                width: 40,
-                height: 4,
-                decoration: BoxDecoration(
-                  color: CaliMindColors.cardBorder,
-                  borderRadius: BorderRadius.circular(2),
-                ),
-              ),
-            ),
-            const SizedBox(height: 20),
-            // Header
-            Row(
-              children: [
-                Container(
-                  padding: const EdgeInsets.all(8),
-                  decoration: BoxDecoration(
-                    color: CaliMindColors.primary,
-                    borderRadius: BorderRadius.circular(10),
-                  ),
-                  child: Icon(
-                    _isEditing ? LucideIcons.pencil : LucideIcons.plus,
-                    color: Colors.white,
-                    size: 16,
-                  ),
-                ),
-                const SizedBox(width: 12),
-                Text(
-                  _isEditing ? 'Edit Task' : 'New Task',
-                  style: CaliMindTypography.h3,
-                ),
-                const Spacer(),
-                IconButton(
-                  onPressed: _requestClose,
-                  icon: const Icon(LucideIcons.x,
-                      color: CaliMindColors.mutedForeground, size: 20),
-                ),
-              ],
-            ),
-            const SizedBox(height: 22),
-
-            // Title
-            _buildLabel('Title *'),
-            const SizedBox(height: 8),
-            _buildTextField(
-              controller: _titleCtrl,
-              hint: 'What do you need to do?',
-              autofocus: !_isEditing,
-              maxLength: 200,
-            ),
-            const SizedBox(height: 16),
-
-            // Keep notes in the existing task description field for backwards compatibility.
-            _buildLabel('Short notes (optional)'),
-            const SizedBox(height: 8),
-            _buildTextField(
-              controller: _descCtrl,
-              hint: 'Write a quick note about this task...',
-              maxLines: 3,
-              maxLength: 300,
-            ),
-            const SizedBox(height: 18),
-
-            // Category
-            _buildLabel('Category'),
-            const SizedBox(height: 8),
-            _buildCategoryChips(),
-            const SizedBox(height: 18),
-
-            // Duration + Priority row
-            Row(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Expanded(child: _buildDurationControl()),
-                const SizedBox(width: 16),
-                Expanded(child: _buildPriorityControl()),
-              ],
-            ),
-            const SizedBox(height: 18),
-
-            // Preferred time
-            _buildLabel('Preferred Time'),
-            const SizedBox(height: 8),
-            _buildPreferredTimeChips(),
-            const SizedBox(height: 18),
-
-            _buildLabel('Exact time'),
-            const SizedBox(height: 8),
-            _buildDateAction(
-              icon: LucideIcons.clock,
-              label: _specificTime ?? 'Choose a start time',
-              onPressed: _selectSpecificTime,
-              onClear: _specificTime == null
-                  ? null
-                  : () => setState(() => _specificTime = null),
-            ),
-            const SizedBox(height: 14),
-            _buildLabel('Due date'),
-            const SizedBox(height: 8),
-            _buildDateAction(
-              icon: LucideIcons.calendarClock,
-              label: _deadline == null
-                  ? 'Choose a due date'
-                  : DateFormat('EEE, MMM d').format(_deadline!),
-              onPressed: _selectDeadline,
-              onClear: _deadline == null
-                  ? null
-                  : () => setState(() => _deadline = null),
-            ),
-            const SizedBox(height: 14),
-            _buildLabel('Reminder'),
-            const SizedBox(height: 8),
-            _buildDateAction(
-              icon: LucideIcons.bell,
-              label: _reminderAt == null
-                  ? 'Set a reminder'
-                  : DateFormat('EEE, MMM d · h:mm a').format(_reminderAt!),
-              onPressed: _selectReminder,
-              onClear: _reminderAt == null
-                  ? null
-                  : () => setState(() => _reminderAt = null),
-            ),
-            const SizedBox(height: 14),
-            _buildLabel('Repeat'),
-            const SizedBox(height: 4),
-            Text(
-              'Create the next task only after you complete this one.',
-              style: CaliMindTypography.bodySmall
-                  .copyWith(color: CaliMindColors.mutedForeground),
-            ),
-            const SizedBox(height: 8),
-            Wrap(
-              spacing: 8,
-              children: [
-                _TimeChip(
-                  label: 'Does not repeat',
-                  isSelected: _recurrence == null,
-                  onTap: () => setState(() => _recurrence = null),
-                ),
-                ...TaskRecurrence.values.map(
-                  (recurrence) => _TimeChip(
-                    label: recurrence.label,
-                    isSelected: _recurrence == recurrence,
-                    onTap: () => setState(() => _recurrence = recurrence),
-                  ),
-                ),
-              ],
-            ),
-            const SizedBox(height: 26),
-
-            // Save button
-            SizedBox(
-              width: double.infinity,
-              height: 52,
-              child: ElevatedButton(
-                onPressed: _isSaving ? null : _save,
-                style: ElevatedButton.styleFrom(
-                  backgroundColor: CaliMindColors.primary,
-                  shape: RoundedRectangleBorder(
-                    borderRadius: BorderRadius.circular(14),
-                  ),
-                ),
-                child: _isSaving
-                    ? const SizedBox(
-                        width: 22,
-                        height: 22,
-                        child: CircularProgressIndicator(
-                          color: Colors.white,
-                          strokeWidth: 2.5,
-                        ),
-                      )
-                    : Text(
-                        _isEditing ? 'Save Changes' : 'Add Task',
-                        style: CaliMindTypography.bodyLarge.copyWith(
-                          color: Colors.white,
-                          fontWeight: FontWeight.w600,
-                        ),
-                      ),
-              ),
-            ),
-          ],
+        decoration: const BoxDecoration(
+          color: CaliMindColors.card,
+          borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
         ),
-      ),
+        padding: EdgeInsets.only(
+          top: 20,
+          left: 24,
+          right: 24,
+          bottom: MediaQuery.of(context).viewInsets.bottom + 28,
+        ),
+        child: SingleChildScrollView(
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              // Handle bar
+              Center(
+                child: Container(
+                  width: 40,
+                  height: 4,
+                  decoration: BoxDecoration(
+                    color: CaliMindColors.cardBorder,
+                    borderRadius: BorderRadius.circular(2),
+                  ),
+                ),
+              ),
+              const SizedBox(height: 20),
+              // Header
+              Row(
+                children: [
+                  Container(
+                    padding: const EdgeInsets.all(8),
+                    decoration: BoxDecoration(
+                      color: CaliMindColors.primary,
+                      borderRadius: BorderRadius.circular(10),
+                    ),
+                    child: Icon(
+                      _isEditing ? LucideIcons.pencil : LucideIcons.plus,
+                      color: Colors.white,
+                      size: 16,
+                    ),
+                  ),
+                  const SizedBox(width: 12),
+                  Text(
+                    _isEditing ? 'Edit Task' : 'New Task',
+                    style: CaliMindTypography.h3,
+                  ),
+                  const Spacer(),
+                  IconButton(
+                    onPressed: _requestClose,
+                    icon: const Icon(
+                      LucideIcons.x,
+                      color: CaliMindColors.mutedForeground,
+                      size: 20,
+                    ),
+                  ),
+                ],
+              ),
+              const SizedBox(height: 22),
+
+              // Title
+              _buildLabel('Title *'),
+              const SizedBox(height: 8),
+              _buildTextField(
+                controller: _titleCtrl,
+                hint: 'What do you need to do?',
+                autofocus: !_isEditing,
+                maxLength: 200,
+              ),
+              const SizedBox(height: 16),
+
+              // Keep notes in the existing task description field for backwards compatibility.
+              _buildLabel('Short notes (optional)'),
+              const SizedBox(height: 8),
+              _buildTextField(
+                controller: _descCtrl,
+                hint: 'Write a quick note about this task...',
+                maxLines: 3,
+                maxLength: 300,
+              ),
+              const SizedBox(height: 18),
+
+              // Category
+              _buildLabel('Category'),
+              const SizedBox(height: 8),
+              _buildCategoryChips(),
+              const SizedBox(height: 18),
+
+              // Duration + Priority row
+              Row(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Expanded(child: _buildDurationControl()),
+                  const SizedBox(width: 16),
+                  Expanded(child: _buildPriorityControl()),
+                ],
+              ),
+              const SizedBox(height: 18),
+
+              // Preferred time
+              _buildLabel('Preferred Time'),
+              const SizedBox(height: 8),
+              _buildPreferredTimeChips(),
+              const SizedBox(height: 18),
+
+              _buildLabel('Exact time'),
+              const SizedBox(height: 8),
+              _buildDateAction(
+                icon: LucideIcons.clock,
+                label: _specificTime ?? 'Choose a start time',
+                onPressed: _selectSpecificTime,
+                onClear: _specificTime == null
+                    ? null
+                    : () => setState(() {
+                        _specificTime = null;
+                        _updateDefaultReminder();
+                      }),
+              ),
+              const SizedBox(height: 14),
+              _buildLabel('Due date'),
+              const SizedBox(height: 8),
+              _buildDateAction(
+                icon: LucideIcons.calendarClock,
+                label: _deadline == null
+                    ? 'Choose a due date'
+                    : DateFormat('EEE, MMM d').format(_deadline!),
+                onPressed: _selectDeadline,
+                onClear: _deadline == null
+                    ? null
+                    : () => setState(() {
+                        _deadline = null;
+                        _updateDefaultReminder();
+                      }),
+              ),
+              const SizedBox(height: 14),
+              _buildLabel('Reminder'),
+              const SizedBox(height: 8),
+              _buildDateAction(
+                icon: LucideIcons.bell,
+                label: _reminderAt == null
+                    ? _reminderDisabled
+                          ? 'No reminder'
+                          : _showDefaultReminder
+                          ? _defaultReminderLabel
+                          : 'Set a reminder'
+                    : '${_reminderCustomized ? 'Custom' : '30 min before'} · ${DateFormat('EEE, MMM d · h:mm a').format(_reminderAt!)}',
+                onPressed: _selectReminder,
+                onClear: _reminderAt == null && !_reminderDisabled
+                    ? null
+                    : () => setState(() {
+                        _reminderAt = null;
+                        _reminderCustomized = true;
+                        _reminderDisabled = true;
+                      }),
+              ),
+              const SizedBox(height: 5),
+              Text(
+                'Defaults to 30 minutes before the exact start time. Tap to choose another time or clear to turn it off.',
+                style: CaliMindTypography.bodySmall.copyWith(
+                  color: CaliMindColors.mutedForeground,
+                ),
+              ),
+              const SizedBox(height: 14),
+              _buildLabel('Repeat'),
+              const SizedBox(height: 4),
+              Text(
+                'Create the next task only after you complete this one.',
+                style: CaliMindTypography.bodySmall.copyWith(
+                  color: CaliMindColors.mutedForeground,
+                ),
+              ),
+              const SizedBox(height: 8),
+              Wrap(
+                spacing: 8,
+                children: [
+                  _TimeChip(
+                    label: 'Does not repeat',
+                    isSelected: _recurrence == null,
+                    onTap: () => setState(() => _recurrence = null),
+                  ),
+                  ...TaskRecurrence.values.map(
+                    (recurrence) => _TimeChip(
+                      label: recurrence.label,
+                      isSelected: _recurrence == recurrence,
+                      onTap: () => setState(() => _recurrence = recurrence),
+                    ),
+                  ),
+                ],
+              ),
+              const SizedBox(height: 26),
+
+              // Save button
+              SizedBox(
+                width: double.infinity,
+                height: 52,
+                child: ElevatedButton(
+                  onPressed: _isSaving ? null : _save,
+                  style: ElevatedButton.styleFrom(
+                    backgroundColor: CaliMindColors.primary,
+                    shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(14),
+                    ),
+                  ),
+                  child: _isSaving
+                      ? const SizedBox(
+                          width: 22,
+                          height: 22,
+                          child: CircularProgressIndicator(
+                            color: Colors.white,
+                            strokeWidth: 2.5,
+                          ),
+                        )
+                      : Text(
+                          _isEditing ? 'Save Changes' : 'Add Task',
+                          style: CaliMindTypography.bodyLarge.copyWith(
+                            color: Colors.white,
+                            fontWeight: FontWeight.w600,
+                          ),
+                        ),
+                ),
+              ),
+            ],
+          ),
+        ),
       ).animate().slideY(begin: 1, duration: 350.ms, curve: Curves.easeOutCubic),
     );
   }
 
   Widget _buildLabel(String text) => Text(
-        text,
-        style: CaliMindTypography.label.copyWith(fontWeight: FontWeight.w600),
-      );
+    text,
+    style: CaliMindTypography.label.copyWith(fontWeight: FontWeight.w600),
+  );
 
   Widget _buildDateAction({
     required IconData icon,
@@ -582,11 +659,14 @@ class _TaskInputSheetState extends ConsumerState<TaskInputSheet> {
         decoration: InputDecoration(
           border: InputBorder.none,
           hintText: hint,
-          hintStyle: CaliMindTypography.bodyMedium
-              .copyWith(color: CaliMindColors.mutedForeground),
+          hintStyle: CaliMindTypography.bodyMedium.copyWith(
+            color: CaliMindColors.mutedForeground,
+          ),
           counterText: '',
-          contentPadding:
-              const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
+          contentPadding: const EdgeInsets.symmetric(
+            horizontal: 14,
+            vertical: 12,
+          ),
         ),
       ),
     );
@@ -608,8 +688,10 @@ class _TaskInputSheetState extends ConsumerState<TaskInputSheet> {
               },
               child: AnimatedContainer(
                 duration: const Duration(milliseconds: 180),
-                padding:
-                    const EdgeInsets.symmetric(horizontal: 12, vertical: 7),
+                padding: const EdgeInsets.symmetric(
+                  horizontal: 12,
+                  vertical: 7,
+                ),
                 decoration: BoxDecoration(
                   color: isSelected
                       ? cat.color.withValues(alpha: 0.15)
@@ -623,11 +705,13 @@ class _TaskInputSheetState extends ConsumerState<TaskInputSheet> {
                 child: Row(
                   mainAxisSize: MainAxisSize.min,
                   children: [
-                    Icon(cat.icon,
-                        size: 12,
-                        color: isSelected
-                            ? cat.color
-                            : CaliMindColors.mutedForeground),
+                    Icon(
+                      cat.icon,
+                      size: 12,
+                      color: isSelected
+                          ? cat.color
+                          : CaliMindColors.mutedForeground,
+                    ),
                     const SizedBox(width: 6),
                     Flexible(
                       child: Text(
@@ -638,8 +722,9 @@ class _TaskInputSheetState extends ConsumerState<TaskInputSheet> {
                           color: isSelected
                               ? cat.color
                               : CaliMindColors.mutedForeground,
-                          fontWeight:
-                              isSelected ? FontWeight.w600 : FontWeight.w400,
+                          fontWeight: isSelected
+                              ? FontWeight.w600
+                              : FontWeight.w400,
                         ),
                       ),
                     ),
@@ -672,8 +757,11 @@ class _TaskInputSheetState extends ConsumerState<TaskInputSheet> {
               GestureDetector(
                 onTap: () =>
                     setState(() => _duration = (_duration - 15).clamp(5, 480)),
-                child: const Icon(LucideIcons.minus,
-                    size: 16, color: CaliMindColors.mutedForeground),
+                child: const Icon(
+                  LucideIcons.minus,
+                  size: 16,
+                  color: CaliMindColors.mutedForeground,
+                ),
               ),
               Text(
                 _formatDur(_duration),
@@ -682,8 +770,11 @@ class _TaskInputSheetState extends ConsumerState<TaskInputSheet> {
               GestureDetector(
                 onTap: () =>
                     setState(() => _duration = (_duration + 15).clamp(5, 480)),
-                child: const Icon(LucideIcons.plus,
-                    size: 16, color: CaliMindColors.mutedForeground),
+                child: const Icon(
+                  LucideIcons.plus,
+                  size: 16,
+                  color: CaliMindColors.mutedForeground,
+                ),
               ),
             ],
           ),
@@ -762,14 +853,17 @@ class _TaskInputSheetState extends ConsumerState<TaskInputSheet> {
       spacing: 8,
       children: [
         _TimeChip(
-            label: 'Any',
-            isSelected: _preferredTime == null,
-            onTap: () => setState(() => _preferredTime = null)),
-        ...PreferredTime.values.map((pt) => _TimeChip(
-              label: pt.label,
-              isSelected: _preferredTime == pt,
-              onTap: () => setState(() => _preferredTime = pt),
-            )),
+          label: 'Any',
+          isSelected: _preferredTime == null,
+          onTap: () => setState(() => _preferredTime = null),
+        ),
+        ...PreferredTime.values.map(
+          (pt) => _TimeChip(
+            label: pt.label,
+            isSelected: _preferredTime == pt,
+            onTap: () => setState(() => _preferredTime = pt),
+          ),
+        ),
       ],
     );
   }
@@ -787,8 +881,11 @@ class _TimeChip extends StatelessWidget {
   final bool isSelected;
   final VoidCallback onTap;
 
-  const _TimeChip(
-      {required this.label, required this.isSelected, required this.onTap});
+  const _TimeChip({
+    required this.label,
+    required this.isSelected,
+    required this.onTap,
+  });
 
   @override
   Widget build(BuildContext context) {
@@ -803,8 +900,9 @@ class _TimeChip extends StatelessWidget {
               : CaliMindColors.background,
           borderRadius: BorderRadius.circular(20),
           border: Border.all(
-            color:
-                isSelected ? CaliMindColors.primary : CaliMindColors.cardBorder,
+            color: isSelected
+                ? CaliMindColors.primary
+                : CaliMindColors.cardBorder,
             width: isSelected ? 1.5 : 1,
           ),
         ),

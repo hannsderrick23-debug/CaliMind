@@ -55,6 +55,6 @@ jobs:
         with:
           files: |
             build/app/outputs/flutter-apk/app-release.apk
-          generate_release_notes: true
+          body_path: release-notes/${{ github.ref_name }}.md
           overwrite: true
           fail_on_unmatched_files: true
