@@ -1,8 +1,10 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:lucide_icons_flutter/lucide_icons.dart';
 import 'package:calimind/presentation/routing/app_router.dart';
 import 'package:calimind/presentation/state/auth_provider.dart';
+import 'package:calimind/presentation/views/notifications/notification_center_screen.dart';
 import 'package:calimind/presentation/views/splash_screen.dart';
 import 'package:calimind/presentation/widgets/auth_backdrop.dart';
 import 'package:calimind/presentation/widgets/star_loading_indicator.dart';
@@ -185,13 +187,11 @@ void main() {
 
     final container = ProviderContainer();
     addTearDown(container.dispose);
+    final router = container.read(appRouterProvider);
     await tester.pumpWidget(
       UncontrolledProviderScope(
         container: container,
-        child: Consumer(
-          builder: (context, ref, child) =>
-              MaterialApp.router(routerConfig: ref.watch(appRouterProvider)),
-        ),
+        child: MaterialApp.router(routerConfig: router),
       ),
     );
     await _pumpAuthAnimations(tester);
@@ -215,5 +215,21 @@ void main() {
       ),
       findsOneWidget,
     );
+
+    await tester.tap(find.text('Open my planner'));
+    await tester.pumpAndSettle();
+    expect(find.byTooltip('Notifications'), findsOneWidget);
+    final bellButton = tester.widget<IconButton>(
+      find.ancestor(
+        of: find.byIcon(LucideIcons.bell),
+        matching: find.byType(IconButton),
+      ),
+    );
+    expect(bellButton.onPressed, isNotNull);
+    bellButton.onPressed!.call();
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 500));
+    expect(router.routeInformationProvider.value.uri.path, '/notifications');
+    expect(find.byType(NotificationCenterScreen), findsOneWidget);
   });
 }

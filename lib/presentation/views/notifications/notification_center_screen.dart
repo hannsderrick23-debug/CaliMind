@@ -47,6 +47,13 @@ class NotificationCenterScreen extends ConsumerWidget {
 
     return Scaffold(
       appBar: AppBar(
+        leading: IconButton(
+          tooltip: 'Back to planner',
+          onPressed: () => context.canPop()
+              ? context.pop()
+              : context.go('/dashboard'),
+          icon: const Icon(LucideIcons.arrowLeft),
+        ),
         title: Text('Notifications', style: CaliMindTypography.h2),
         actions: [
           if (hasUnread)

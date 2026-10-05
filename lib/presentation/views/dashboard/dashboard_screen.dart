@@ -301,6 +301,15 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen>
             ),
           ),
         ),
+        IconButton(
+          tooltip: 'Notifications',
+          icon: const Icon(
+            LucideIcons.bell,
+            color: CaliMindColors.mutedForeground,
+            size: 20,
+          ),
+          onPressed: () => context.go('/notifications'),
+        ),
         // Settings
         IconButton(
           icon: const Icon(LucideIcons.settings,
