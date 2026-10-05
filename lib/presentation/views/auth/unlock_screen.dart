@@ -7,6 +7,7 @@ import 'package:calimind/core/constants/app_typography.dart';
 import 'package:calimind/presentation/state/auth_provider.dart';
 import 'package:calimind/presentation/widgets/auth_backdrop.dart';
 import 'package:calimind/presentation/widgets/calimind_mark.dart';
+import 'package:calimind/presentation/widgets/star_loading_indicator.dart';
 
 class UnlockScreen extends ConsumerStatefulWidget {
   const UnlockScreen({super.key});
@@ -88,10 +89,7 @@ class _UnlockScreenState extends ConsumerState<UnlockScreen> {
                           ? const SizedBox(
                               width: 18,
                               height: 18,
-                              child: CircularProgressIndicator(
-                                strokeWidth: 2,
-                                color: CaliMindColors.primary,
-                              ),
+                              child: const StarLoadingIndicator(size: 18),
                             )
                           : const Icon(LucideIcons.fingerprint),
                       label: const Text('Unlock with biometrics'),

@@ -32,6 +32,27 @@ class TaskReminderService {
         ),
       ),
     );
+    final android = _notifications
+        .resolvePlatformSpecificImplementation<
+          AndroidFlutterLocalNotificationsPlugin
+        >();
+    await android?.createNotificationChannel(
+      const AndroidNotificationChannel(
+        _channelId,
+        'Task reminders',
+        description: 'Reminders for tasks you scheduled in CaliMind.',
+        importance: Importance.high,
+      ),
+    );
+    await android?.createNotificationChannel(
+      const AndroidNotificationChannel(
+        _silentChannelId,
+        'Silent task reminders',
+        description: 'Silent reminders for tasks in CaliMind.',
+        importance: Importance.high,
+        playSound: false,
+      ),
+    );
   }
 
   Future<bool> requestPermission() async {

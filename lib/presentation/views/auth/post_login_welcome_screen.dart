@@ -9,6 +9,7 @@ import 'package:calimind/domain/models/task.dart';
 import 'package:calimind/domain/use_cases/calculate_weekly_progress_use_case.dart';
 import 'package:calimind/presentation/state/auth_provider.dart';
 import 'package:calimind/presentation/state/task_provider.dart';
+import 'package:calimind/presentation/widgets/star_loading_indicator.dart';
 import 'package:calimind/presentation/widgets/auth_backdrop.dart';
 import 'package:calimind/presentation/widgets/calimind_mark.dart';
 
@@ -72,10 +73,7 @@ class PostLoginWelcomeScreen extends ConsumerWidget {
                       child: SizedBox(
                         height: 24,
                         width: 24,
-                        child: CircularProgressIndicator(
-                          strokeWidth: 2,
-                          color: CaliMindColors.primary,
-                        ),
+                        child: const StarLoadingIndicator(size: 24),
                       ),
                     ),
                   ),

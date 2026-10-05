@@ -13,6 +13,7 @@ import 'package:calimind/core/services/widget_service.dart';
 import 'package:calimind/domain/models/task.dart';
 import 'package:calimind/presentation/state/schedule_provider.dart';
 import 'package:calimind/presentation/state/task_provider.dart';
+import 'package:calimind/presentation/widgets/star_loading_indicator.dart';
 
 class TaskInputSheet extends ConsumerStatefulWidget {
   final Task? taskToEdit;
@@ -579,9 +580,9 @@ class _TaskInputSheetState extends ConsumerState<TaskInputSheet> {
                       ? const SizedBox(
                           width: 22,
                           height: 22,
-                          child: CircularProgressIndicator(
+                          child: const StarLoadingIndicator(
+                            size: 22,
                             color: Colors.white,
-                            strokeWidth: 2.5,
                           ),
                         )
                       : Text(

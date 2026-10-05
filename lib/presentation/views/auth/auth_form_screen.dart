@@ -9,6 +9,7 @@ import 'package:calimind/core/constants/app_typography.dart';
 import 'package:calimind/core/services/biometric_service.dart';
 import 'package:calimind/core/utils/app_feedback.dart';
 import 'package:calimind/presentation/state/auth_provider.dart';
+import 'package:calimind/presentation/widgets/star_loading_indicator.dart';
 import 'package:calimind/presentation/widgets/auth_backdrop.dart';
 import 'package:calimind/presentation/widgets/calimind_mark.dart';
 import 'package:calimind/presentation/widgets/oauth_buttons.dart';
@@ -646,9 +647,9 @@ class _PrimaryAuthButton extends StatelessWidget {
           ? const SizedBox(
               width: 21,
               height: 21,
-              child: CircularProgressIndicator(
+              child: const StarLoadingIndicator(
+                size: 21,
                 color: Colors.white,
-                strokeWidth: 2,
               ),
             )
           : Text(

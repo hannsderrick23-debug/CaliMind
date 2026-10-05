@@ -14,6 +14,7 @@ import '../../domain/models/schedule_slot.dart';
 import '../../domain/models/task.dart';
 import '../state/auth_provider.dart';
 import '../state/device_calendar_provider.dart';
+import 'star_loading_indicator.dart';
 
 class AventorEyeFeed extends ConsumerStatefulWidget {
   const AventorEyeFeed({
@@ -285,10 +286,7 @@ class _AventorEyeFeedState extends ConsumerState<AventorEyeFeed> {
         const SizedBox(
           width: 18,
           height: 18,
-          child: CircularProgressIndicator(
-            strokeWidth: 2,
-            color: CaliMindColors.primary,
-          ),
+          child: const StarLoadingIndicator(size: 18),
         ),
       ],
     ),

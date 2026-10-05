@@ -18,6 +18,7 @@ import 'package:calimind/domain/use_cases/generate_schedule_use_case.dart';
 import 'package:calimind/presentation/state/device_calendar_provider.dart';
 import 'package:calimind/presentation/state/schedule_provider.dart';
 import 'package:calimind/presentation/state/task_provider.dart';
+import 'package:calimind/presentation/widgets/star_loading_indicator.dart';
 import 'package:calimind/presentation/views/tasks/task_deletion_action.dart';
 import '../tasks/task_input_sheet.dart';
 import 'widgets/timeline_view.dart';
@@ -382,7 +383,7 @@ class ScheduleTabState extends ConsumerState<ScheduleTab> {
         if (schedule.isGenerating)
           const Padding(
             padding: EdgeInsets.symmetric(vertical: 48),
-            child: CircularProgressIndicator(color: CaliMindColors.primary),
+            child: const StarLoadingIndicator(size: 24),
           )
         else
           _buildCurrentView(schedule),

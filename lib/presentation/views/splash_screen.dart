@@ -4,6 +4,7 @@ import 'package:calimind/core/constants/app_colors.dart';
 import 'package:calimind/core/constants/app_typography.dart';
 import 'package:calimind/presentation/widgets/auth_backdrop.dart';
 import 'package:calimind/presentation/widgets/calimind_mark.dart';
+import 'package:calimind/presentation/widgets/star_loading_indicator.dart';
 
 class SplashScreen extends StatelessWidget {
   const SplashScreen({super.key});
@@ -49,10 +50,7 @@ class SplashScreen extends StatelessWidget {
               const SizedBox(
                 width: 22,
                 height: 22,
-                child: CircularProgressIndicator(
-                  strokeWidth: 2,
-                  color: CaliMindColors.primary,
-                ),
+                child: const StarLoadingIndicator(size: 22),
               ),
             ],
           ),

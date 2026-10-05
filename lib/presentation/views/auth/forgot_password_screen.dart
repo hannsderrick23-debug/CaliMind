@@ -5,6 +5,7 @@ import 'package:lucide_icons_flutter/lucide_icons.dart';
 import 'package:calimind/core/constants/app_colors.dart';
 import 'package:calimind/core/constants/app_typography.dart';
 import 'package:calimind/presentation/state/auth_provider.dart';
+import 'package:calimind/presentation/widgets/star_loading_indicator.dart';
 import 'package:calimind/presentation/widgets/auth_backdrop.dart';
 
 class ForgotPasswordScreen extends ConsumerStatefulWidget {
@@ -157,9 +158,7 @@ class _ForgotPasswordScreenState extends ConsumerState<ForgotPasswordScreen> {
                               ? const SizedBox(
                                   width: 20,
                                   height: 20,
-                                  child: CircularProgressIndicator(
-                                    strokeWidth: 2,
-                                  ),
+                                  child: const StarLoadingIndicator(size: 20),
                                 )
                               : const Text('Send reset link'),
                         ),

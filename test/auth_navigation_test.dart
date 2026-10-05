@@ -5,6 +5,7 @@ import 'package:calimind/presentation/routing/app_router.dart';
 import 'package:calimind/presentation/state/auth_provider.dart';
 import 'package:calimind/presentation/views/splash_screen.dart';
 import 'package:calimind/presentation/widgets/auth_backdrop.dart';
+import 'package:calimind/presentation/widgets/star_loading_indicator.dart';
 
 Future<void> _pumpAuthAnimations(WidgetTester tester) async {
   await tester.pump();
@@ -159,7 +160,7 @@ void main() {
 
     expect(find.text('CaliMind'), findsOneWidget);
     expect(find.text('A little more clarity, every day.'), findsOneWidget);
-    expect(find.byType(CircularProgressIndicator), findsOneWidget);
+    expect(find.byType(StarLoadingIndicator), findsOneWidget);
     expect(
       find.byWidgetPredicate(
         (widget) =>

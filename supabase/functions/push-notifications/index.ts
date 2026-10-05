@@ -272,7 +272,11 @@ async function notifyScheduleGenerated(
   const result = await sendToUserDevices(userId, {
     title: "Schedule ready",
     body: `Your schedule for ${date} is ready with ${taskCount} task${taskCount === 1 ? "" : "s"}.`,
-    data: { event: "schedule_generated", schedule_date: date },
+    data: {
+      event: "schedule_generated",
+      schedule_date: date,
+      recipient_user_id: userId,
+    },
   });
   return jsonResponse({
     delivered: result.delivered > 0,
@@ -328,7 +332,11 @@ async function dispatchDueReminders(): Promise<Response> {
       const result = await sendToUserDevices(job.user_id, {
         title: "Task reminder",
         body: job.title,
-        data: { task_id: job.task_id, event: "task_reminder" },
+        data: {
+          task_id: job.task_id,
+          event: "task_reminder",
+          recipient_user_id: job.user_id,
+        },
       });
       const delivered = result.delivered > 0;
       await updateJob(

@@ -9,6 +9,7 @@ import 'package:calimind/core/utils/app_feedback.dart';
 import 'package:calimind/presentation/state/auth_provider.dart';
 import 'package:calimind/presentation/state/task_provider.dart';
 import 'package:calimind/presentation/widgets/weekly_progress_widget.dart';
+import 'package:calimind/presentation/widgets/star_loading_indicator.dart';
 import 'package:calimind/domain/models/task.dart';
 
 class ProfileScreen extends ConsumerStatefulWidget {
@@ -150,9 +151,7 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
             const SizedBox(height: 20),
             tasksAsync.when(
               loading: () => const Center(
-                child: CircularProgressIndicator(
-                  color: CaliMindColors.primary,
-                ),
+                child: const StarLoadingIndicator(size: 24),
               ),
               error: (error, _) => Text(
                 'Activity is unavailable: ${taskOperationErrorMessage(error)}',
@@ -242,8 +241,8 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
                   ? const SizedBox(
                       width: 18,
                       height: 18,
-                      child: CircularProgressIndicator(
-                        strokeWidth: 2,
+                      child: const StarLoadingIndicator(
+                        size: 18,
                         color: Colors.white,
                       ),
                     )

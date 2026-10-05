@@ -4,6 +4,7 @@ import 'package:go_router/go_router.dart';
 import 'package:calimind/core/constants/app_colors.dart';
 import 'package:calimind/core/constants/app_typography.dart';
 import 'package:calimind/presentation/state/auth_provider.dart';
+import 'package:calimind/presentation/widgets/star_loading_indicator.dart';
 
 class ResetPasswordScreen extends ConsumerStatefulWidget {
   const ResetPasswordScreen({super.key});
@@ -75,7 +76,11 @@ class _ResetPasswordScreenState extends ConsumerState<ResetPasswordScreen> {
                 child: ElevatedButton(
                   onPressed: auth.isLoading ? null : _updatePassword,
                   child: auth.isLoading
-                      ? const SizedBox(width: 20, height: 20, child: CircularProgressIndicator(strokeWidth: 2))
+                      ? const SizedBox(
+                          width: 20,
+                          height: 20,
+                          child: StarLoadingIndicator(size: 20),
+                        )
                       : const Text('Update password'),
                 ),
               ),

@@ -3,6 +3,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:lucide_icons_flutter/lucide_icons.dart';
 import 'package:calimind/core/constants/app_colors.dart';
 import 'package:calimind/presentation/state/voice_assistant_provider.dart';
+import 'package:calimind/presentation/widgets/star_loading_indicator.dart';
 
 class VoiceAssistantFab extends ConsumerWidget {
   final VoidCallback onTap;
@@ -65,9 +66,9 @@ class VoiceAssistantFab extends ConsumerWidget {
                         ? const SizedBox(
                             width: 22,
                             height: 22,
-                            child: CircularProgressIndicator(
+                            child: const StarLoadingIndicator(
+                              size: 22,
                               color: Colors.white,
-                              strokeWidth: 2.5,
                             ),
                           )
                         : Icon(

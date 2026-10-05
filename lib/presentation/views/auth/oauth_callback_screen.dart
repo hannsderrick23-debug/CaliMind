@@ -6,6 +6,7 @@ import 'package:go_router/go_router.dart';
 import 'package:lucide_icons_flutter/lucide_icons.dart';
 import 'package:calimind/core/constants/app_colors.dart';
 import 'package:calimind/core/constants/app_typography.dart';
+import 'package:calimind/presentation/widgets/star_loading_indicator.dart';
 import 'package:calimind/presentation/state/auth_provider.dart';
 
 class OAuthCallbackScreen extends ConsumerStatefulWidget {
@@ -52,7 +53,7 @@ class _OAuthCallbackScreenState extends ConsumerState<OAuthCallbackScreen> {
             const SizedBox(
               width: 22,
               height: 22,
-              child: CircularProgressIndicator(strokeWidth: 2),
+              child: const StarLoadingIndicator(size: 22),
             ),
           ],
         ),

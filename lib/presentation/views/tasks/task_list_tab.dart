@@ -11,6 +11,7 @@ import 'package:calimind/presentation/state/schedule_provider.dart';
 import 'package:calimind/presentation/state/task_provider.dart';
 import 'package:calimind/presentation/widgets/weekly_progress_widget.dart';
 import 'package:calimind/presentation/widgets/aventor_eye_feed.dart';
+import 'package:calimind/presentation/widgets/star_loading_indicator.dart';
 import 'task_input_sheet.dart';
 import 'widgets/task_card.dart';
 
@@ -25,7 +26,7 @@ class TaskListTab extends ConsumerWidget {
 
     return tasksAsync.when(
       loading: () => const Center(
-        child: CircularProgressIndicator(color: CaliMindColors.primary),
+        child: const StarLoadingIndicator(size: 24),
       ),
       error: (e, _) => Center(
         child: Padding(

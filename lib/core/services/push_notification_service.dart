@@ -4,7 +4,14 @@ import 'package:firebase_core/firebase_core.dart';
 import 'package:firebase_messaging/firebase_messaging.dart';
 import 'package:flutter/foundation.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
+import 'package:calimind/core/services/notification_inbox_service.dart';
 import 'package:calimind/core/services/task_reminder_service.dart';
+
+@pragma('vm:entry-point')
+Future<void> firebaseMessagingBackgroundHandler(RemoteMessage message) async {
+  await Firebase.initializeApp();
+  await NotificationInboxService.instance.recordPush(message);
+}
 
 class PushDeliveryResult {
   final bool delivered;
@@ -42,14 +49,24 @@ class PushNotificationService {
     try {
       await Firebase.initializeApp();
       _firebaseAvailable = true;
+      try {
+        await _localNotifications.initialize();
+      } catch (error) {
+        debugPrint('Could not initialize local notification channels: $error');
+      }
+      FirebaseMessaging.onBackgroundMessage(
+        firebaseMessagingBackgroundHandler,
+      );
       _messageSubscription = FirebaseMessaging.onMessage.listen(
-        _showForegroundMessage,
+        _handleForegroundMessage,
       );
       _openedSubscription = FirebaseMessaging.onMessageOpenedApp.listen(
-        (message) => debugPrint(
-          'Push notification opened: ${message.messageId ?? 'unknown message'}',
-        ),
+        _handleOpenedMessage,
       );
+      final initialMessage = await FirebaseMessaging.instance.getInitialMessage();
+      if (initialMessage != null) {
+        await NotificationInboxService.instance.recordPush(initialMessage);
+      }
       _tokenSubscription = FirebaseMessaging.instance.onTokenRefresh.listen(
         _registerToken,
         onError: (Object error) =>
@@ -221,6 +238,18 @@ class PushNotificationService {
     } catch (error) {
       debugPrint('Could not save the Firebase push token: $error');
     }
+  }
+
+  Future<void> _handleForegroundMessage(RemoteMessage message) async {
+    await NotificationInboxService.instance.recordPush(message);
+    await _showForegroundMessage(message);
+  }
+
+  Future<void> _handleOpenedMessage(RemoteMessage message) async {
+    await NotificationInboxService.instance.recordPush(message);
+    debugPrint(
+      'Push notification opened: ${message.messageId ?? 'unknown message'}',
+    );
   }
 
   Future<void> _showForegroundMessage(RemoteMessage message) async {

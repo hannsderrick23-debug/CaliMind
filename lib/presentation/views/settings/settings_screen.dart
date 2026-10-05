@@ -14,6 +14,7 @@ import 'package:calimind/core/services/task_reminder_service.dart';
 import 'package:calimind/core/services/widget_service.dart';
 import 'package:calimind/core/utils/app_feedback.dart';
 import 'package:calimind/core/utils/network_error_utils.dart';
+import 'package:calimind/presentation/widgets/star_loading_indicator.dart';
 import 'package:calimind/data/datasources/audit_remote_datasource.dart';
 import 'package:calimind/domain/models/audit_log.dart';
 import 'package:calimind/presentation/state/auth_provider.dart';
@@ -635,16 +636,25 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
                     ? const SizedBox(
                         width: 18,
                         height: 18,
-                        child: CircularProgressIndicator(
-                          strokeWidth: 2,
-                          color: CaliMindColors.primary,
-                        ),
+                        child: const StarLoadingIndicator(size: 18),
                       )
                     : Switch(
                         value: _notificationsEnabled,
                         onChanged: _setNotificationsEnabled,
                         activeThumbColor: CaliMindColors.primary,
                       ),
+              ),
+              _Divider(),
+              _SettingsTile(
+                icon: LucideIcons.bellRing,
+                title: 'Notification center',
+                subtitle: 'Upcoming reminders and recent alerts',
+                trailing: const Icon(
+                  LucideIcons.chevronRight,
+                  size: 16,
+                  color: CaliMindColors.mutedForeground,
+                ),
+                onTap: () => context.push('/notifications'),
               ),
               _Divider(),
               _SettingsTile(
@@ -659,10 +669,7 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
                     ? const SizedBox(
                         width: 18,
                         height: 18,
-                        child: CircularProgressIndicator(
-                          strokeWidth: 2,
-                          color: CaliMindColors.primary,
-                        ),
+                        child: const StarLoadingIndicator(size: 18),
                       )
                     : Switch(
                         value: _aventorEyeEnabled,
@@ -757,10 +764,7 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
                     ? const SizedBox(
                         width: 16,
                         height: 16,
-                        child: CircularProgressIndicator(
-                          strokeWidth: 2,
-                          color: CaliMindColors.primary,
-                        ),
+                        child: const StarLoadingIndicator(size: 16),
                       )
                     : const Icon(
                         LucideIcons.playCircle,
@@ -879,10 +883,7 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
                     ? const SizedBox(
                         width: 22,
                         height: 22,
-                        child: CircularProgressIndicator(
-                          strokeWidth: 2,
-                          color: CaliMindColors.primary,
-                        ),
+                        child: const StarLoadingIndicator(size: 22),
                       )
                     : Switch(
                         value: _biometricEnabled,
@@ -959,10 +960,7 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
                     ? const SizedBox(
                         width: 18,
                         height: 18,
-                        child: CircularProgressIndicator(
-                          strokeWidth: 2,
-                          color: CaliMindColors.primary,
-                        ),
+                          child: const StarLoadingIndicator(size: 18),
                       )
                     : Switch(
                         value: _phoneClockAlarmEnabled,
@@ -1008,10 +1006,7 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
               profileAsync.when(
                 loading: () => const Padding(
                   padding: EdgeInsets.all(16),
-                  child: CircularProgressIndicator(
-                    color: CaliMindColors.primary,
-                    strokeWidth: 2,
-                  ),
+                  child: const StarLoadingIndicator(size: 24),
                 ),
                 error: (_, __) => const SizedBox.shrink(),
                 data: (profile) => Column(
@@ -1106,8 +1101,8 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
                       ? const SizedBox(
                           width: 18,
                           height: 18,
-                          child: CircularProgressIndicator(
-                            strokeWidth: 2,
+                          child: const StarLoadingIndicator(
+                            size: 18,
                             color: CaliMindColors.destructive,
                           ),
                         )

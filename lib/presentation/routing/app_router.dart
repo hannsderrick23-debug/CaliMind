@@ -16,6 +16,7 @@ import '../views/auth/unlock_screen.dart';
 import '../views/splash_screen.dart';
 import '../views/dashboard/dashboard_screen.dart';
 import '../views/profile/profile_screen.dart';
+import '../views/notifications/notification_center_screen.dart';
 import '../views/settings/settings_screen.dart';
 import '../views/tasks/task_details_screen.dart';
 
@@ -149,6 +150,10 @@ final appRouterProvider = Provider<GoRouter>((ref) {
       GoRoute(
         path: '/settings',
         builder: (context, state) => const SettingsScreen(),
+      ),
+      GoRoute(
+        path: '/notifications',
+        builder: (context, state) => const NotificationCenterScreen(),
       ),
       GoRoute(
         path: '/tasks/:taskId',
